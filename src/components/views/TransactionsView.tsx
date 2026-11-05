@@ -16,6 +16,7 @@ import { useI18n } from '../../context/I18nContext';
 import { formatCurrency } from '../../utils/finance';
 import { Transaction } from '../../types';
 import { CategoryIcon } from '../common/CategoryIcon';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 export const TransactionsView: React.FC = () => {
   const {
@@ -34,6 +35,7 @@ export const TransactionsView: React.FC = () => {
   } = useApp();
 
   const { t } = useI18n();
+  const { isOnline } = useOnlineStatus();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
@@ -111,10 +113,16 @@ export const TransactionsView: React.FC = () => {
           <h2 className="text-xl font-black text-neutral-900 dark:text-white">
             Transactions & Historique
           </h2>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             <span className="text-xs text-neutral-400">
               {filteredTransactions.length} opération(s) affichée(s)
             </span>
+            {!isOnline && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Mode hors-ligne · Cache Workbox
+              </span>
+            )}
             <span className="text-neutral-500">·</span>
             <button
               onClick={() => setFilterByPeriod(!filterByPeriod)}

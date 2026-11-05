@@ -1,18 +1,39 @@
 {
   "name": "LiquiMind — Intelligence & clarté financière",
   "short_name": "LiquiMind",
-  "description": "Pilotage intelligent de trésorerie, budgets enveloppes, dettes, bourse et assistant IA.",
+  "description": "Application mobile de pilotage intelligent de trésorerie, investissements, bourse, dettes et assistant financier IA.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#101011",
-  "theme_color": "#c4f24e",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "categories": ["finance", "productivity", "business"],
   "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/10384/10384161.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "https://cdn-icons-png.flaticon.com/512/10384/10384161.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bourse & Marchés",
+      "url": "/?view=assets",
+      "description": "Consulter les cours de bourse et le portefeuille"
+    },
+    {
+      "name": "Prévisions",
+      "url": "/?view=forecast",
+      "description": "Échéancier prévisionnel de trésorerie"
     }
   ]
 }

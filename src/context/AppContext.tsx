@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   Space,
   SpaceId,
+  SpaceCollaborator,
   Account,
   Category,
   Transaction,
@@ -33,6 +34,14 @@ import {
   INITIAL_RECURRING,
   INITIAL_NOTIFICATIONS,
   INITIAL_USER_SETTINGS,
+  DEMO_ACCOUNTS,
+  DEMO_TRANSACTIONS,
+  DEMO_BUDGETS,
+  DEMO_COUNTERPARTIES,
+  DEMO_DEBT_LEDGER,
+  DEMO_GOALS,
+  DEMO_ASSETS,
+  DEMO_RECURRING,
 } from '../data/initialData';
 import { getPeriodRange, navigatePeriod, isDateInPeriod } from '../utils/finance';
 import {
@@ -41,6 +50,68 @@ import {
   syncDataToFirestore,
   loadDataFromFirestore,
 } from '../services/firebase';
+
+export const ACCENT_PALETTES: Record<
+  string,
+  { name: string; primary: string; hover: string; text: string; tint: string; ring: string }
+> = {
+  cobalt: {
+    name: 'Bleu Cobalt (Par défaut)',
+    primary: '#1d4ed8',
+    hover: '#1e40af',
+    text: '#ffffff',
+    tint: '#eff6ff',
+    ring: '#3b82f6',
+  },
+  emerald: {
+    name: 'Émeraude',
+    primary: '#059669',
+    hover: '#047857',
+    text: '#ffffff',
+    tint: '#ecfdf5',
+    ring: '#10b981',
+  },
+  violet: {
+    name: 'Violet Royal',
+    primary: '#7c3aed',
+    hover: '#6d28d9',
+    text: '#ffffff',
+    tint: '#f5f3ff',
+    ring: '#8b5cf6',
+  },
+  amber: {
+    name: 'Ambre Doré',
+    primary: '#d97706',
+    hover: '#b45309',
+    text: '#ffffff',
+    tint: '#fffbeb',
+    ring: '#f59e0b',
+  },
+  rose: {
+    name: 'Rose Carmin',
+    primary: '#e11d48',
+    hover: '#be123c',
+    text: '#ffffff',
+    tint: '#fff1f2',
+    ring: '#f43f5e',
+  },
+  cyan: {
+    name: 'Cyan Océan',
+    primary: '#0284c7',
+    hover: '#0369a1',
+    text: '#ffffff',
+    tint: '#f0f9ff',
+    ring: '#0ea5e9',
+  },
+  lime: {
+    name: 'Vert Lime',
+    primary: '#65a30d',
+    hover: '#4d7c0f',
+    text: '#ffffff',
+    tint: '#f7fee7',
+    ring: '#84cc16',
+  },
+};
 
 export type NavTab =
   | 'dashboard'
@@ -78,6 +149,29 @@ interface AppContextType {
   updateSpace: (id: SpaceId, updates: Partial<Space>) => void;
   addSpace: (name: string, tag: string, icon: string) => void;
 
+  // Collaborators & Spaces Administration
+  isCollaboratorsModalOpen: boolean;
+  setIsCollaboratorsModalOpen: (open: boolean) => void;
+  collaboratorSpaceTarget: SpaceId | null;
+  openCollaboratorsModal: (spaceId?: SpaceId) => void;
+  inviteCollaborator: (
+    spaceId: string,
+    email: string,
+    role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER',
+    permissions?: Partial<SpaceCollaborator['permissions']>
+  ) => void;
+  removeCollaborator: (spaceId: string, collaboratorId: string) => void;
+  updateCollaboratorRole: (
+    spaceId: string,
+    collaboratorId: string,
+    role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'
+  ) => void;
+  updateCollaboratorPermissions: (
+    spaceId: string,
+    collaboratorId: string,
+    perms: Partial<SpaceCollaborator['permissions']>
+  ) => void;
+
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
@@ -90,10 +184,14 @@ interface AppContextType {
   notifications: NotificationItem[];
   userSettings: UserSettings;
 
-  // Auth & Cloud Sync (Google / Firebase Firestore)
+  // Auth & Cloud Sync (Google / Firebase / Email)
   authUser: AuthUser | null;
   isSyncingCloud: boolean;
   loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, password?: string, displayName?: string) => Promise<void>;
+  registerWithEmail: (email: string, password?: string, displayName?: string) => Promise<void>;
+  loginAsGuest: () => void;
+  logout: () => Promise<void>;
   logoutGoogle: () => Promise<void>;
   syncNowWithCloud: () => Promise<void>;
 
@@ -224,7 +322,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeSpaceId, setActiveSpaceId] = useState<SpaceId | 'all'>('all');
 
   const [accounts, setAccounts] = useState<Account[]>(() => loadStorage('accounts', INITIAL_ACCOUNTS));
-  const [categories, setCategories] = useState<Category[]>(() => loadStorage('categories', INITIAL_CATEGORIES));
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const loaded = loadStorage('categories', INITIAL_CATEGORIES);
+    return Array.isArray(loaded)
+      ? loaded.map((c) => (c.expectedAmount === 21300 ? { ...c, expectedAmount: 0 } : c))
+      : INITIAL_CATEGORIES;
+  });
   const [transactions, setTransactions] = useState<Transaction[]>(() => loadStorage('transactions', INITIAL_TRANSACTIONS));
   const [budgets, setBudgets] = useState<BudgetEnvelope[]>(() => loadStorage('budgets', INITIAL_BUDGETS));
   const [counterparties, setCounterparties] = useState<Counterparty[]>(() => loadStorage('counterparties', INITIAL_COUNTERPARTIES));
@@ -315,26 +418,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('authUser', authUser), [authUser]);
   useEffect(() => saveStorage('chatHistory', chatHistory), [chatHistory]);
 
+  // Collaborators & Spaces Administration
+  const [isCollaboratorsModalOpen, setIsCollaboratorsModalOpen] = useState(false);
+  const [collaboratorSpaceTarget, setCollaboratorSpaceTarget] = useState<SpaceId | null>(null);
+
+  const openCollaboratorsModal = (spaceId?: SpaceId) => {
+    setCollaboratorSpaceTarget(spaceId || (activeSpaceId === 'all' ? 'personal' : activeSpaceId));
+    setIsCollaboratorsModalOpen(true);
+  };
+
+  const inviteCollaborator = (
+    spaceId: string,
+    email: string,
+    role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER',
+    permissions?: Partial<SpaceCollaborator['permissions']>
+  ) => {
+    const targetId = spaceId && spaceId !== 'all' ? spaceId : (spaces[0]?.id || 'personal');
+    const newCollab: SpaceCollaborator = {
+      id: `collab_${Date.now()}`,
+      email: email.trim(),
+      name: email.split('@')[0],
+      role,
+      status: 'INVITED',
+      invitedAt: new Date().toISOString().slice(0, 10),
+      permissions: {
+        canAddTransactions: role !== 'VIEWER',
+        canEditBudgets: role === 'OWNER' || role === 'ADMIN',
+        canManageAccounts: role === 'OWNER' || role === 'ADMIN',
+        canInviteOthers: role === 'OWNER' || role === 'ADMIN',
+        canViewReports: true,
+        ...permissions,
+      },
+    };
+
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === targetId) {
+          const current = s.collaborators || [];
+          return {
+            ...s,
+            collaborators: [...current.filter((c) => c.email.toLowerCase() !== email.trim().toLowerCase()), newCollab],
+          };
+        }
+        return s;
+      })
+    );
+
+    setNotifications((prev) => [
+      {
+        id: `notif_${Date.now()}`,
+        title: 'Invitation collaborateur',
+        message: `Invitation envoyée à ${email.trim()} avec le rôle ${role}.`,
+        date: new Date().toISOString().slice(0, 10),
+        read: false,
+        type: 'success',
+      },
+      ...prev,
+    ]);
+  };
+
+  const removeCollaborator = (spaceId: string, collaboratorId: string) => {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === spaceId && s.collaborators) {
+          return { ...s, collaborators: s.collaborators.filter((c) => c.id !== collaboratorId) };
+        }
+        return s;
+      })
+    );
+  };
+
+  const updateCollaboratorRole = (
+    spaceId: string,
+    collaboratorId: string,
+    role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'
+  ) => {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === spaceId && s.collaborators) {
+          return {
+            ...s,
+            collaborators: s.collaborators.map((c) => (c.id === collaboratorId ? { ...c, role } : c)),
+          };
+        }
+        return s;
+      })
+    );
+  };
+
+  const updateCollaboratorPermissions = (
+    spaceId: string,
+    collaboratorId: string,
+    perms: Partial<SpaceCollaborator['permissions']>
+  ) => {
+    setSpaces((prev) =>
+      prev.map((s) => {
+        if (s.id === spaceId && s.collaborators) {
+          return {
+            ...s,
+            collaborators: s.collaborators.map((c) =>
+              c.id === collaboratorId ? { ...c, permissions: { ...c.permissions, ...perms } } : c
+            ),
+          };
+        }
+        return s;
+      })
+    );
+  };
+
   useEffect(() => {
     saveStorage('userSettings', userSettings);
     if (userSettings.theme === 'dark') {
       document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
     }
 
-    const accent = userSettings.accentColor || '#c4f24e';
-    document.documentElement.style.setProperty('--brand-primary', accent);
-    const cleanHex = accent.replace('#', '');
-    const r = parseInt(cleanHex.substring(0, 2), 16) || 196;
-    const g = parseInt(cleanHex.substring(2, 4), 16) || 242;
-    const b = parseInt(cleanHex.substring(4, 6), 16) || 78;
-    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    const textColor = yiq >= 150 ? '#101011' : '#ffffff';
-    document.documentElement.style.setProperty('--brand-primary-text', textColor);
+    const key = userSettings.accentColor || 'cobalt';
+    const palette = ACCENT_PALETTES[key] || {
+      name: 'Personnalisé',
+      primary: key.startsWith('#') ? key : '#1d4ed8',
+      hover: '#1e40af',
+      text: '#ffffff',
+      tint: '#eff6ff',
+      ring: '#3b82f6',
+    };
+
+    document.documentElement.style.setProperty('--brand-primary', palette.primary);
+    document.documentElement.style.setProperty('--brand-primary-hover', palette.hover);
+    document.documentElement.style.setProperty('--brand-primary-text', palette.text);
+    document.documentElement.style.setProperty('--brand-primary-tint', palette.tint);
+    document.documentElement.style.setProperty('--brand-ring', palette.ring);
   }, [userSettings]);
 
-  // Automatic Cloud Sync when logged in with Google
+  // Automatic Cloud Sync when logged in with Google or Email
   useEffect(() => {
     if (!authUser) return;
     const timer = setTimeout(() => {
@@ -360,49 +579,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const user = await signInWithGoogleFirebase();
       setAuthUser(user);
-      setUserSettings((prev) => ({
-        ...prev,
-        userName: user.displayName,
-        email: user.email,
-      }));
+      if (user) {
+        setUserSettings((prev) => ({
+          ...prev,
+          userName: user.displayName,
+          email: user.email,
+        }));
 
-      // Check if user has cloud data stored in Firestore
-      const cloudData = await loadDataFromFirestore(user.uid);
-      if (cloudData && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
-        if (cloudData.spaces) setSpaces(cloudData.spaces);
-        if (cloudData.accounts) setAccounts(cloudData.accounts);
-        if (cloudData.categories) setCategories(cloudData.categories);
-        if (cloudData.transactions) setTransactions(cloudData.transactions);
-        if (cloudData.budgets) setBudgets(cloudData.budgets);
-        if (cloudData.counterparties) setCounterparties(cloudData.counterparties);
-        if (cloudData.debtLedger) setDebtLedger(cloudData.debtLedger);
-        if (cloudData.goals) setGoals(cloudData.goals);
-        if (cloudData.assets) setAssets(cloudData.assets);
-        if (cloudData.recurring) setRecurring(cloudData.recurring);
-      } else {
-        await syncDataToFirestore(user.uid, {
-          spaces,
-          accounts,
-          categories,
-          transactions,
-          budgets,
-          counterparties,
-          debtLedger,
-          goals,
-          assets,
-          recurring,
-          userSettings,
-        });
+        // Check if user has cloud data stored in Firestore
+        const cloudData = await loadDataFromFirestore(user.uid);
+        if (cloudData && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
+          if (cloudData.spaces) setSpaces(cloudData.spaces);
+          if (cloudData.accounts) setAccounts(cloudData.accounts);
+          if (cloudData.categories) setCategories(cloudData.categories);
+          if (cloudData.transactions) setTransactions(cloudData.transactions);
+          if (cloudData.budgets) setBudgets(cloudData.budgets);
+          if (cloudData.counterparties) setCounterparties(cloudData.counterparties);
+          if (cloudData.debtLedger) setDebtLedger(cloudData.debtLedger);
+          if (cloudData.goals) setGoals(cloudData.goals);
+          if (cloudData.assets) setAssets(cloudData.assets);
+          if (cloudData.recurring) setRecurring(cloudData.recurring);
+        } else {
+          await syncDataToFirestore(user.uid, {
+            spaces,
+            accounts,
+            categories,
+            transactions,
+            budgets,
+            counterparties,
+            debtLedger,
+            goals,
+            assets,
+            recurring,
+            userSettings,
+          });
+        }
       }
     } finally {
       setIsSyncingCloud(false);
     }
   };
 
-  const logoutGoogle = async () => {
-    await signOutFirebase();
-    setAuthUser(null);
+  const loginWithEmail = async (email: string, password?: string, displayName?: string) => {
+    setIsSyncingCloud(true);
+    try {
+      const user: AuthUser = {
+        uid: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        email: email.trim(),
+        displayName: displayName?.trim() || email.split('@')[0] || 'Utilisateur',
+        provider: 'email',
+        lastSyncedAt: new Date().toISOString(),
+      };
+      setAuthUser(user);
+      setUserSettings((prev) => ({
+        ...prev,
+        userName: user.displayName,
+        email: user.email,
+      }));
+    } finally {
+      setIsSyncingCloud(false);
+    }
   };
+
+  const registerWithEmail = async (email: string, password?: string, displayName?: string) => {
+    await loginWithEmail(email, password, displayName);
+  };
+
+  const loginAsGuest = () => {
+    const user: AuthUser = {
+      uid: 'guest_user',
+      email: 'invite@liquimind.local',
+      displayName: 'Utilisateur Invité',
+      provider: 'guest',
+      lastSyncedAt: new Date().toISOString(),
+    };
+    setAuthUser(user);
+  };
+
+  const logout = async () => {
+    try {
+      await signOutFirebase();
+    } catch {}
+    setAuthUser(null);
+    try {
+      localStorage.removeItem('tresoria_authUser');
+    } catch {}
+  };
+
+  const logoutGoogle = logout;
 
   const syncNowWithCloud = async () => {
     if (!authUser) return;
@@ -897,7 +1161,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     } catch {}
 
-    setAccounts((prev) => prev.map((a) => ({ ...a, balance: 0, alertThreshold: 0 })));
+    const zeroAccount: Account = {
+      id: 'acc_main',
+      name: 'Compte Principal',
+      type: 'CHECKING',
+      spaceId: 'personal',
+      balance: 0,
+      currency: userSettings.primaryCurrency || 'MAD',
+      bankName: 'Compte bancaire',
+      color: '#1d4ed8',
+    };
+
+    setAccounts([zeroAccount]);
+    setCategories((prev) => prev.map((c) => ({ ...c, expectedAmount: 0 })));
     setTransactions([]);
     setDebtLedger([]);
     setCounterparties([]);
@@ -905,8 +1181,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRecurring([]);
     setGoals([]);
     setBudgets([]);
-    setCategories((prev) => prev.filter((c) => c.direction === 'IN' || c.isGroup));
-    setNotifications([]);
+    setStagedTransactions([]);
+    setNotifications([
+      {
+        id: `notif_${Date.now()}`,
+        title: 'Remise à zéro effectuée',
+        message: 'Tous les comptes, transactions, dettes, budgets et prévisions ont été remis à 0 DH.',
+        date: new Date().toISOString().slice(0, 10),
+        read: false,
+        type: 'info',
+      },
+    ]);
+    setChatHistory([
+      {
+        id: 'msg_welcome_reset',
+        role: 'assistant',
+        content: 'Bonjour ! Votre espace LiquiMind est entièrement remis à 0 DH. Que souhaitez-vous configurer en premier ?',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
   };
 
   const resetToDemo = () => {
@@ -919,17 +1212,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
 
     setSpaces(INITIAL_SPACES);
-    setAccounts(INITIAL_ACCOUNTS);
+    setAccounts(DEMO_ACCOUNTS);
     setCategories(INITIAL_CATEGORIES);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setBudgets(INITIAL_BUDGETS);
-    setCounterparties(INITIAL_COUNTERPARTIES);
-    setDebtLedger(INITIAL_DEBT_LEDGER);
-    setGoals(INITIAL_GOALS);
-    setAssets(INITIAL_ASSETS);
-    setRecurring(INITIAL_RECURRING);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setUserSettings({ ...INITIAL_USER_SETTINGS, aiOnboardingPromptSeen: true });
+    setTransactions(DEMO_TRANSACTIONS);
+    setBudgets(DEMO_BUDGETS);
+    setCounterparties(DEMO_COUNTERPARTIES);
+    setDebtLedger(DEMO_DEBT_LEDGER);
+    setGoals(DEMO_GOALS);
+    setAssets(DEMO_ASSETS);
+    setRecurring(DEMO_RECURRING);
+    setNotifications([
+      {
+        id: `notif_${Date.now()}`,
+        title: 'Données démo rechargées',
+        message: 'Le jeu complet de données de démonstration (salaires, charges, BVC, crédits) a été rechargé.',
+        date: new Date().toISOString().slice(0, 10),
+        read: false,
+        type: 'success',
+      },
+    ]);
   };
 
   const exportDataJson = (): string => {
@@ -982,6 +1283,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveSpaceId,
         updateSpace,
         addSpace,
+        isCollaboratorsModalOpen,
+        setIsCollaboratorsModalOpen,
+        collaboratorSpaceTarget,
+        openCollaboratorsModal,
+        inviteCollaborator,
+        removeCollaborator,
+        updateCollaboratorRole,
+        updateCollaboratorPermissions,
         accounts,
         categories,
         transactions,
@@ -996,6 +1305,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authUser,
         isSyncingCloud,
         loginWithGoogle,
+        loginWithEmail,
+        registerWithEmail,
+        loginAsGuest,
+        logout,
         logoutGoogle,
         syncNowWithCloud,
         isAIOnboardingOpen,

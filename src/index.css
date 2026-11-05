@@ -22,20 +22,26 @@
 }
 
 :root {
-  --brand-primary: #c4f24e;
-  --brand-primary-text: #101011;
-  --brand-primary-hover: #b0dc41;
-  --bg-app: #fcfdfa;
+  --brand-primary: #1d4ed8;
+  --brand-primary-text: #ffffff;
+  --brand-primary-hover: #1e40af;
+  --brand-primary-tint: #eff6ff;
+  --brand-ring: #3b82f6;
+  --bg-app: #f8fafc;
   --bg-card: #ffffff;
-  --bg-field: #f3f4f6;
-  --border-subtle: #e5e7eb;
+  --bg-field: #f1f5f9;
+  --border-subtle: #e2e8f0;
 }
 
 /* Brand Button & Contrast Styling - Guaranteed readable text */
 .btn-brand,
 .bg-brand {
-  background-color: var(--brand-primary, #c4f24e) !important;
-  color: var(--brand-primary-text, #101011) !important;
+  background-color: var(--brand-primary, #1d4ed8) !important;
+  color: var(--brand-primary-text, #ffffff) !important;
+}
+
+.btn-brand:hover {
+  background-color: var(--brand-primary-hover, #1e40af) !important;
 }
 
 .btn-brand *,
@@ -49,15 +55,19 @@
 }
 
 .text-brand {
-  color: var(--brand-primary, #c4f24e);
+  color: var(--brand-primary, #1d4ed8);
 }
 
 .text-brand-contrast {
-  color: var(--brand-primary-text, #101011) !important;
+  color: var(--brand-primary-text, #ffffff) !important;
 }
 
 .border-brand {
-  border-color: var(--brand-primary, #c4f24e);
+  border-color: var(--brand-primary, #1d4ed8);
+}
+
+.bg-brand-tint {
+  background-color: var(--brand-primary-tint, #eff6ff);
 }
 
 /* Force contrast if text-brand accidentally applied on solid brand */

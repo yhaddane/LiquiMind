@@ -14,14 +14,14 @@ export const MobileNav: React.FC<{ onOpenMore: () => void }> = ({ onOpenMore }) 
   const { t } = useI18n();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden flex h-16 items-center justify-around border-t border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-[#121214]/95 px-2 backdrop-blur-lg safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden flex h-16 items-center justify-around border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#121214]/95 px-2 backdrop-blur-lg safe-bottom">
       {/* Dashboard */}
       <button
         onClick={() => setActiveTab('dashboard')}
-        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${
+        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 cursor-pointer ${
           activeTab === 'dashboard'
-            ? 'text-lime-600 dark:text-[#c4f24e]'
-            : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+            ? 'text-blue-700 dark:text-blue-400 font-bold'
+            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
         }`}
       >
         <LayoutDashboard className="h-5 w-5" />
@@ -31,10 +31,10 @@ export const MobileNav: React.FC<{ onOpenMore: () => void }> = ({ onOpenMore }) 
       {/* Plan / Budgets */}
       <button
         onClick={() => setActiveTab('plan')}
-        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${
+        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 cursor-pointer ${
           activeTab === 'plan'
-            ? 'text-lime-600 dark:text-[#c4f24e]'
-            : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+            ? 'text-blue-700 dark:text-blue-400 font-bold'
+            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
         }`}
       >
         <CalendarRange className="h-5 w-5" />
@@ -45,7 +45,7 @@ export const MobileNav: React.FC<{ onOpenMore: () => void }> = ({ onOpenMore }) 
       <div className="-mt-5 flex items-center justify-center">
         <button
           onClick={() => setIsAddTxModalOpen(true)}
-          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#c4f24e] text-[#101011] shadow-lg shadow-lime-500/25 active:scale-95 transition"
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-700 text-white shadow-lg shadow-blue-700/30 active:scale-95 transition cursor-pointer"
           aria-label={t('nav.addTransaction')}
         >
           <Plus className="h-6 w-6 stroke-[3]" />
@@ -55,10 +55,10 @@ export const MobileNav: React.FC<{ onOpenMore: () => void }> = ({ onOpenMore }) 
       {/* Transactions */}
       <button
         onClick={() => setActiveTab('transactions')}
-        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 ${
+        className={`flex flex-col items-center justify-center gap-1 w-16 py-1 cursor-pointer ${
           activeTab === 'transactions'
-            ? 'text-lime-600 dark:text-[#c4f24e]'
-            : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+            ? 'text-blue-700 dark:text-blue-400 font-bold'
+            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
         }`}
       >
         <ArrowLeftRight className="h-5 w-5" />
@@ -68,7 +68,7 @@ export const MobileNav: React.FC<{ onOpenMore: () => void }> = ({ onOpenMore }) 
       {/* More / Menu */}
       <button
         onClick={onOpenMore}
-        className="flex flex-col items-center justify-center gap-1 w-16 py-1 text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+        className="flex flex-col items-center justify-center gap-1 w-16 py-1 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer"
       >
         <Menu className="h-5 w-5" />
         <span className="text-[10px] font-semibold">{t('nav.menu') || 'Menu'}</span>

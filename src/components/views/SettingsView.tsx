@@ -25,6 +25,9 @@ import {
   LogIn,
   Plus,
   Edit2,
+  Users,
+  ShieldCheck,
+  UserCheck,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useI18n, LocaleCode } from '../../context/I18nContext';
@@ -38,8 +41,10 @@ export const SettingsView: React.FC = () => {
     spaces,
     updateSpace,
     addSpace,
+    openCollaboratorsModal,
     authUser,
     loginWithGoogle,
+    logout,
     logoutGoogle,
     syncNowWithCloud,
     isSyncingCloud,
@@ -84,17 +89,17 @@ export const SettingsView: React.FC = () => {
     { code: 'CAD', label: 'Dollar canadien ($)' },
   ];
 
-  const activeAccent = userSettings.accentColor || '#c4f24e';
+  const activeAccent = userSettings.accentColor || '#1d4ed8';
 
   const colorPresets = [
-    { name: 'Lime LiquiMind', hex: '#c4f24e' },
-    { name: 'Émeraude Menthe', hex: '#10b981' },
-    { name: 'Bleu Cobalt', hex: '#3b82f6' },
-    { name: 'Violet Améthyste', hex: '#8b5cf6' },
-    { name: 'Or Solaire', hex: '#f59e0b' },
-    { name: 'Rose Rubis', hex: '#f43f5e' },
-    { name: 'Turquoise Cyan', hex: '#06b6d4' },
-    { name: 'Ardoise Platine', hex: '#64748b' },
+    { name: 'Bleu Cobalt (Défaut)', hex: '#1d4ed8' },
+    { name: 'Émeraude Menthe', hex: '#059669' },
+    { name: 'Violet Royal', hex: '#7c3aed' },
+    { name: 'Ambre Doré', hex: '#d97706' },
+    { name: 'Rose Carmin', hex: '#e11d48' },
+    { name: 'Cyan Océan', hex: '#0284c7' },
+    { name: 'Vert Lime', hex: '#65a30d' },
+    { name: 'Ardoise Neutre', hex: '#475569' },
   ];
 
   const processJsonString = (jsonText: string) => {
@@ -266,27 +271,27 @@ export const SettingsView: React.FC = () => {
                 <button
                   onClick={syncNowWithCloud}
                   disabled={isSyncingCloud}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-200 transition"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 transition cursor-pointer"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isSyncingCloud ? 'animate-spin text-[#c4f24e]' : ''}`} />
+                  <RefreshCw className={`h-3.5 w-3.5 ${isSyncingCloud ? 'animate-spin text-brand' : ''}`} />
                   <span>{isSyncingCloud ? 'Sync en cours...' : 'Synchroniser'}</span>
                 </button>
                 <button
-                  onClick={logoutGoogle}
-                  className="p-2 rounded-xl text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition"
-                  title="Se déconnecter de Google"
+                  onClick={logout}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 text-xs font-semibold transition cursor-pointer"
+                  title="Se déconnecter (ouvre la page de connexion)"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Déconnexion</span>
                 </button>
               </div>
             ) : (
               <button
-                onClick={loginWithGoogle}
-                disabled={isSyncingCloud}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#c4f24e] text-neutral-950 font-bold text-xs hover:bg-[#b0dc41] shadow-md transition"
+                onClick={logout}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl btn-brand font-bold text-xs shadow-md transition cursor-pointer"
               >
                 <LogIn className="h-4 w-4" />
-                <span>Se connecter avec Google</span>
+                <span>Page de connexion</span>
               </button>
             )}
           </div>
@@ -446,6 +451,64 @@ export const SettingsView: React.FC = () => {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Collaboration & Permissions Administration Card */}
+      <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-brand" />
+            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+              Gestion Collaborative des Espaces & Administration par Email
+            </h3>
+          </div>
+          <button
+            onClick={() => openCollaboratorsModal()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl btn-brand text-xs font-bold transition cursor-pointer"
+          >
+            <Users className="h-3.5 w-3.5" />
+            <span>Gérer les membres & invitations</span>
+          </button>
+        </div>
+
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Invitez vos collaborateurs, associés ou conjoints par adresse email avec des rôles précis (Propriétaire, Administrateur, Éditeur ou Lecteur seul) et des droits personnalisés (transactions, budgets, exports, suppression).
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          {spaces.map((s) => {
+            const collabCount = s.collaborators?.length || 0;
+            return (
+              <div
+                key={s.id}
+                className="flex items-center justify-between p-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-lg">{s.icon}</span>
+                  <div>
+                    <span className="text-xs font-bold text-neutral-900 dark:text-white block">
+                      {s.name}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 flex items-center gap-1">
+                      <UserCheck className="h-3 w-3 text-brand" />
+                      {collabCount === 0
+                        ? '1 membre (vous)'
+                        : `${collabCount + 1} membres collaborateurs`}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => openCollaboratorsModal(s.id)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition cursor-pointer"
+                >
+                  Gérer
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Shortcuts & Modals Launcher Card */}

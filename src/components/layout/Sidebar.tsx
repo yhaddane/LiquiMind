@@ -195,44 +195,43 @@ export const Sidebar: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowResetMenu(!showResetMenu)}
-                className="text-[10px] font-bold text-brand hover:underline"
+                className="text-[10px] font-bold text-brand hover:underline cursor-pointer"
               >
                 Réinitialiser...
               </button>
             </div>
 
             {showResetMenu && (
-              <div className="absolute bottom-full mb-2 left-0 right-0 z-30 p-2 rounded-xl bg-neutral-900 border border-neutral-800 shadow-2xl text-left space-y-1">
+              <div className="absolute bottom-full mb-2 left-0 right-0 z-30 p-2 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl text-left space-y-1">
                 <div className="text-[10px] font-semibold text-neutral-400 px-2 py-1 uppercase tracking-wider">
                   Options de réinitialisation
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
-                    if (window.confirm('Voulez-vous remettre tous les compteurs à 0 DH (soldes 0, transactions effacées) ?')) {
-                      resetToZero();
-                      setShowResetMenu(false);
-                    }
+                    resetToZero();
+                    setShowResetMenu(false);
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition flex items-center justify-between"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition flex items-center justify-between cursor-pointer"
                 >
                   <span>Mettre compteurs à 0 DH</span>
-                  <span className="text-[10px] text-neutral-400">0 DH</span>
+                  <span className="text-[10px] text-neutral-400 font-mono">0 DH</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    if (window.confirm('Voulez-vous recharger le jeu de données démo ?')) {
-                      resetToDemo();
-                      setShowResetMenu(false);
-                    }
+                    resetToDemo();
+                    setShowResetMenu(false);
                   }}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-200 hover:bg-neutral-800 transition flex items-center justify-between"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition flex items-center justify-between cursor-pointer"
                 >
                   <span>Recharger données démo</span>
                   <span className="text-[10px] text-brand">Exemple</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setShowResetMenu(false)}
-                  className="w-full text-center py-1 text-[10px] text-neutral-400 hover:text-white"
+                  className="w-full text-center py-1 text-[10px] text-neutral-400 hover:text-neutral-900 dark:hover:text-white cursor-pointer"
                 >
                   Annuler
                 </button>
@@ -241,12 +240,11 @@ export const Sidebar: React.FC = () => {
           </div>
         ) : (
           <button
+            type="button"
             onClick={() => {
-              if (window.confirm('Remettre tous les compteurs à 0 DH ?')) {
-                resetToZero();
-              }
+              resetToZero();
             }}
-            className="flex w-full items-center justify-center text-brand text-[10px] font-bold py-1"
+            className="flex w-full items-center justify-center text-rose-500 text-[10px] font-bold py-1 hover:underline cursor-pointer"
             title="Réinitialiser (0 DH)"
           >
             0 DH

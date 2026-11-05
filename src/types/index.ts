@@ -1,10 +1,28 @@
 export type SpaceId = string;
 
+export interface SpaceCollaborator {
+  id: string;
+  email: string;
+  name?: string;
+  role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
+  status: 'ACTIVE' | 'INVITED';
+  invitedAt: string;
+  permissions: {
+    canAddTransactions: boolean;
+    canEditBudgets: boolean;
+    canManageAccounts: boolean;
+    canInviteOthers: boolean;
+    canViewReports: boolean;
+  };
+}
+
 export interface Space {
   id: SpaceId;
   name: string;
   tag: string;
   icon: string;
+  ownerEmail?: string;
+  collaborators?: SpaceCollaborator[];
 }
 
 export type AccountType = 'CHECKING' | 'SAVINGS' | 'CASH' | 'PRO' | 'INVESTMENT';
@@ -132,6 +150,7 @@ export interface Asset {
   color: string;
   location?: string;
   notes?: string;
+  spaceId?: SpaceId;
   holdings?: FinancialHolding[];
 }
 
@@ -152,7 +171,7 @@ export interface AuthUser {
   displayName: string;
   email: string;
   photoURL?: string;
-  provider: 'google' | 'firebase';
+  provider: 'google' | 'firebase' | 'email' | 'guest';
   lastSyncedAt?: string;
 }
 
@@ -221,4 +240,35 @@ export interface AIWeeklyTip {
   advice: string;
   actionLabel: string;
   severity: 'high' | 'medium' | 'low';
+}
+
+export interface FinancialMarketItem {
+  symbol: string;
+  name: string;
+  category: 'BVC' | 'OPCVM' | 'CRYPTO' | 'INDEX' | 'COMMODITY' | 'GLOBAL';
+  price: number;
+  currency: string;
+  change24h: number;
+  market: string;
+  lastUpdated?: string;
+  description?: string;
+}
+
+export interface CustomReportConfig {
+  title: string;
+  startDate: string;
+  endDate: string;
+  spaceId?: string | 'all';
+  includeAccounts?: boolean;
+  includeCashflow?: boolean;
+  includeTransactions?: boolean;
+  includeCategories?: boolean;
+  includeDebts?: boolean;
+  includeAssets?: boolean;
+  includeGoals?: boolean;
+  includeForecast?: boolean;
+  includeAIInsights?: boolean;
+  includeRecurring?: boolean;
+  includeBudgets?: boolean;
+  customNotes?: string;
 }

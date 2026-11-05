@@ -31,6 +31,9 @@ import { ForecastView } from './components/views/ForecastView';
 import { AssistantView } from './components/views/AssistantView';
 import { AIOnboardingModal } from './components/modals/AIOnboardingModal';
 import { AndroidAppModal } from './components/modals/AndroidAppModal';
+import { CollaboratorsModal } from './components/modals/CollaboratorsModal';
+import { LoginPage } from './components/auth/LoginPage';
+import { OfflineIndicator } from './components/common/OfflineIndicator';
 
 const MainLayout: React.FC = () => {
   const { activeTab, isAddCategoryModalOpen, setIsAddCategoryModalOpen, addCategoryDefaultKind } = useApp();
@@ -68,7 +71,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#fcfdfa] dark:bg-[#101011] text-neutral-900 dark:text-neutral-100 font-sans antialiased">
+    <div className="flex h-screen w-full overflow-hidden bg-[#f8fafc] dark:bg-[#101011] text-slate-900 dark:text-slate-100 font-sans antialiased">
       {/* Desktop Sidebar */}
       <Sidebar />
 
@@ -101,19 +104,32 @@ const MainLayout: React.FC = () => {
       <NotificationsDrawer />
       <AIOnboardingModal />
       <AndroidAppModal />
+      <CollaboratorsModal />
       <MobileMoreModal
         isOpen={isMobileMoreOpen}
         onClose={() => setIsMobileMoreOpen(false)}
       />
+      <OfflineIndicator />
     </div>
   );
+};
+
+const AppContent: React.FC = () => {
+  const { authUser } = useApp();
+
+  // If user is not authenticated, render the dedicated LoginPage
+  if (!authUser) {
+    return <LoginPage />;
+  }
+
+  return <MainLayout />;
 };
 
 export default function App() {
   return (
     <I18nProvider initialLocale="fr">
       <AppProvider>
-        <MainLayout />
+        <AppContent />
       </AppProvider>
     </I18nProvider>
   );

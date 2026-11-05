@@ -22,6 +22,7 @@ import {
   Check,
   X,
   LogIn,
+  Users,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
@@ -35,6 +36,7 @@ export const Navbar: React.FC = () => {
     setActiveSpaceId,
     updateSpace,
     addSpace,
+    openCollaboratorsModal,
     userSettings,
     toggleHideAmounts,
     toggleTheme,
@@ -274,9 +276,35 @@ export const Navbar: React.FC = () => {
                   );
                 })}
               </div>
+
+              {/* Manage Space Collaborators shortcut */}
+              <div className="pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSpaceDropdownOpen(false);
+                    openCollaboratorsModal(activeSpaceId !== 'all' ? activeSpaceId : undefined);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-brand hover:bg-brand/10 transition cursor-pointer"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>Gestion des collaborateurs & rôles</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
+
+        {/* Quick Collaborate Button */}
+        <button
+          type="button"
+          onClick={() => openCollaboratorsModal(activeSpaceId !== 'all' ? activeSpaceId : undefined)}
+          title="Gérer les collaborateurs et l'administration de l'espace"
+          className="hidden md:flex items-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-100/70 dark:bg-neutral-900/80 px-2.5 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:text-brand hover:border-brand/40 transition cursor-pointer"
+        >
+          <Users className="h-3.5 w-3.5 text-brand" />
+          <span className="hidden xl:inline text-[11px]">Partager / Membres</span>
+        </button>
 
         {/* Global Period Vision Selector & Stepper */}
         <div className="relative flex items-center">
@@ -418,10 +446,23 @@ export const Navbar: React.FC = () => {
         <button
           onClick={() => setActiveTab('assistant')}
           title="Assistant Financier IA & Rapports"
-          className="flex items-center gap-1.5 rounded-xl border border-lime-500/30 bg-lime-500/10 hover:bg-lime-500/20 px-2.5 py-1 text-xs font-bold text-lime-700 dark:text-[#c4f24e] transition cursor-pointer"
+          className="flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 hover:bg-brand/20 px-2.5 py-1 text-xs font-bold text-brand transition cursor-pointer"
         >
           <Sparkles className="h-3.5 w-3.5" />
           <span className="hidden md:inline">Assistant IA</span>
+        </button>
+
+        {/* Android App & APK Download Trigger */}
+        <button
+          onClick={() => setIsAndroidModalOpen(true)}
+          title="Télécharger l'application Android LiquiMind (.APK)"
+          className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-400 transition cursor-pointer"
+        >
+          <Smartphone className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+          <span className="hidden sm:inline">App Android</span>
+          <span className="text-[9px] font-mono font-black px-1.5 py-0.5 rounded bg-blue-700 text-white shadow-xs">
+            APK
+          </span>
         </button>
 
         {/* Google Cloud Sync Button / Status */}

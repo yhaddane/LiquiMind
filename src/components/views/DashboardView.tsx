@@ -23,6 +23,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
 import { AIWeeklyInsights } from '../common/AIWeeklyInsights';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import {
   calculateTotalBalance,
   calculateMonthlyCashflow,
@@ -58,6 +59,7 @@ export const DashboardView: React.FC = () => {
   const [editBudgetAmount, setEditBudgetAmount] = useState<string>('');
 
   const { t } = useI18n();
+  const { isOnline } = useOnlineStatus();
 
   // Balance calculation
   const totalBalance = calculateTotalBalance(accounts, activeSpaceId === 'all' ? null : activeSpaceId);
@@ -67,7 +69,7 @@ export const DashboardView: React.FC = () => {
     periodRange.endDate,
     activeSpaceId === 'all' ? null : activeSpaceId
   );
-  const runway = calculateRunwayMonths(totalBalance, expenses || 7000);
+  const runway = expenses > 0 ? calculateRunwayMonths(totalBalance, expenses) : (totalBalance > 0 ? 99 : 0);
   const netWorth = calculateNetWorth(accounts, assets);
 
   // Recent transactions in this period (or fallback to recent)
@@ -141,6 +143,12 @@ export const DashboardView: React.FC = () => {
                   ? 'Personnel'
                   : 'Studio Nour'}
               </span>
+              {!isOnline && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Mode hors-ligne · Cache Workbox
+                </span>
+              )}
             </div>
 
             <div className="mt-2 flex items-baseline gap-3">
