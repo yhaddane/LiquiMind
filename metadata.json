@@ -1,0 +1,7 @@
+{
+  "name": "LiquiMind — Intelligence & clarté financière",
+  "description": "Application de gestion budgétaire LiquiMind : vision par période, budgets enveloppes, dettes, patrimoine, import de relevés bancaires multi-formats.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
