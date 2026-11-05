@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -16,9 +16,13 @@ import {
   Wallet,
   Clock,
   UserCheck,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
+import { AIWeeklyInsights } from '../common/AIWeeklyInsights';
 import {
   calculateTotalBalance,
   calculateMonthlyCashflow,
@@ -35,6 +39,7 @@ export const DashboardView: React.FC = () => {
     transactions,
     categories,
     budgets,
+    addBudget,
     goals,
     assets,
     counterparties,
@@ -48,6 +53,9 @@ export const DashboardView: React.FC = () => {
     setIsAddTxModalOpen,
     setTxTypeFilter,
   } = useApp();
+
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [editBudgetAmount, setEditBudgetAmount] = useState<string>('');
 
   const { t } = useI18n();
 
@@ -268,32 +276,36 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
+      {/* AI Weekly Insights Widget */}
+      <AIWeeklyInsights />
+
       {/* Main Grid: Budgets & Recurring / Goals */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 cols): Budgets Envelopes */}
         <div className="lg:col-span-2 space-y-6">
           {/* Budget Envelopes Progress */}
-          <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 sm:p-6">
+          <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 sm:p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
                   {t('dashboard.overview') || 'Budgets du mois'}
                 </h3>
                 <p className="text-xs text-neutral-400">
-                  Suivi par enveloppe pour {selectedMonth}
+                  Plafonds mensuels & progression pour {selectedMonth}
                 </p>
               </div>
               <button
                 onClick={() => setActiveTab('plan')}
                 className="text-xs font-bold text-lime-600 dark:text-[#c4f24e] hover:underline"
               >
-                Gérer le plan →
+                Gérer le plan complet →
               </button>
             </div>
 
             <div className="space-y-4">
               {budgetSummaries.slice(0, 5).map((item) => {
                 const { progress } = item;
+                const isEditing = editingBudgetId === item.id;
                 const barColor =
                   progress.statusColor === 'red'
                     ? 'bg-rose-500'
@@ -301,8 +313,10 @@ export const DashboardView: React.FC = () => {
                     ? 'bg-amber-400'
                     : 'bg-[#c4f24e]';
 
+                const targetBudgetObj = budgets.find((b) => b.id === item.id);
+
                 return (
-                  <div key={item.id} className="space-y-1.5">
+                  <div key={item.id} className="space-y-1.5 p-2 rounded-2xl hover:bg-neutral-50 dark:hover:bg-neutral-900/40 transition">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <span className="text-base">{item.icon}</span>
@@ -310,27 +324,77 @@ export const DashboardView: React.FC = () => {
                           {item.category}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span className="text-neutral-400">
-                          {userSettings.hideAmounts
-                            ? '•••'
-                            : formatCurrency(item.spent, userSettings.primaryCurrency)}
-                        </span>
-                        <span className="text-neutral-500">/</span>
-                        <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-                          {userSettings.hideAmounts
-                            ? '•••'
-                            : formatCurrency(item.budgeted, userSettings.primaryCurrency)}
-                        </span>
-                      </div>
+
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            value={editBudgetAmount}
+                            onChange={(e) => setEditBudgetAmount(e.target.value)}
+                            className="w-20 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-0.5 text-xs text-white font-mono"
+                            placeholder="Plafond"
+                          />
+                          <button
+                            onClick={() => {
+                              const val = parseFloat(editBudgetAmount);
+                              if (targetBudgetObj && !isNaN(val) && val >= 0) {
+                                addBudget(targetBudgetObj.categoryId, val, selectedMonth);
+                              }
+                              setEditingBudgetId(null);
+                            }}
+                            className="p-1 rounded-lg bg-[#c4f24e] text-neutral-950 font-bold"
+                          >
+                            <Check className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => setEditingBudgetId(null)}
+                            className="p-1 rounded-lg text-neutral-400 hover:text-white"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 font-mono group/btn">
+                          <span className="text-neutral-400">
+                            {userSettings.hideAmounts
+                              ? '•••'
+                              : formatCurrency(item.spent, userSettings.primaryCurrency)}
+                          </span>
+                          <span className="text-neutral-500">/</span>
+                          <span className="font-bold text-neutral-800 dark:text-neutral-200">
+                            {userSettings.hideAmounts
+                              ? '•••'
+                              : formatCurrency(item.budgeted, userSettings.primaryCurrency)}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditingBudgetId(item.id);
+                              setEditBudgetAmount(String(item.budgeted));
+                            }}
+                            className="p-1 text-neutral-400 hover:text-white rounded opacity-0 group-hover/btn:opacity-100 transition"
+                            title="Modifier ce plafond mensuel"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Progress Bar */}
+                    {/* Progress Bar with Colored States */}
                     <div className="h-2 w-full rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                         style={{ width: `${Math.min(100, progress.percentage)}%` }}
                       />
+                    </div>
+
+                    <div className="flex justify-between text-[10px] text-neutral-400">
+                      <span>{progress.percentage}% consommé</span>
+                      <span className={progress.isOver ? 'text-rose-400 font-bold' : ''}>
+                        {progress.isOver
+                          ? `Dépassement de +${formatCurrency(Math.abs(progress.remaining), userSettings.primaryCurrency)}`
+                          : `Reste ${formatCurrency(progress.remaining, userSettings.primaryCurrency)}`}
+                      </span>
                     </div>
                   </div>
                 );

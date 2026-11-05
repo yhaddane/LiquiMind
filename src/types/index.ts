@@ -1,4 +1,4 @@
-export type SpaceId = 'personal' | 'pro';
+export type SpaceId = string;
 
 export interface Space {
   id: SpaceId;
@@ -46,7 +46,7 @@ export interface Transaction {
   currency: string;
   description: string;
   isRecurring?: boolean;
-  recurringDay?: number; // 1 - 31 day of the month
+  recurringDay?: number;
   recurrenceId?: string | null;
   counterpartyId?: string | null;
   transferId?: string | null;
@@ -69,6 +69,17 @@ export interface Counterparty {
   isArchived?: boolean;
 }
 
+export interface AmortizationRow {
+  installmentNumber: number;
+  dueDate: string;
+  payment: number;
+  principal: number;
+  interest: number;
+  insurance: number;
+  remainingBalance: number;
+  isPaid: boolean;
+}
+
 export interface DebtLedgerItem {
   id: string;
   counterpartyId: string;
@@ -76,7 +87,7 @@ export interface DebtLedgerItem {
   txId?: string | null;
   date: string;
   type: 'CREDIT_GIVEN' | 'CREDIT_REPAID' | 'LOAN_RECEIVED' | 'LOAN_REPAID' | 'BANK_LOAN';
-  amount: number; // Total loan or remaining balance
+  amount: number;
   currency: string;
   description: string;
   bankName?: string;
@@ -84,6 +95,8 @@ export interface DebtLedgerItem {
   interestRate?: number;
   remainingCapital?: number;
   endDate?: string;
+  amortizationSchedule?: AmortizationRow[];
+  scheduleFileName?: string;
 }
 
 export interface Goal {
@@ -98,15 +111,28 @@ export interface Goal {
   isArchived?: boolean;
 }
 
+export interface FinancialHolding {
+  id: string;
+  symbol: string;
+  name: string;
+  instrumentType: 'STOCK' | 'OPCVM' | 'ETF' | 'CRYPTO' | 'BOND';
+  quantity: number;
+  buyPrice: number; // PRU (Prix de Revient Unitaire)
+  currentPrice: number; // Valeur liquidative / Cours réel
+  lastUpdated: string;
+}
+
 export interface Asset {
   id: string;
   name: string;
   category: 'REAL_ESTATE' | 'GOLD' | 'STOCKS' | 'CASH' | 'CRYPTO';
   value: number;
+  purchaseValue?: number;
   currency: string;
   color: string;
   location?: string;
   notes?: string;
+  holdings?: FinancialHolding[];
 }
 
 export interface RecurringItem {
@@ -121,6 +147,15 @@ export interface RecurringItem {
   isActive: boolean;
 }
 
+export interface AuthUser {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+  provider: 'google' | 'firebase';
+  lastSyncedAt?: string;
+}
+
 export interface UserSettings {
   userName: string;
   email: string;
@@ -130,6 +165,7 @@ export interface UserSettings {
   accentColor?: string;
   hideAmounts: boolean;
   onboardingCompleted: boolean;
+  aiOnboardingPromptSeen?: boolean;
   activeSpaceId: SpaceId | 'all';
   streakDays: number;
   lastActivityDate: string;
@@ -148,19 +184,41 @@ export type PeriodVision = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'CUSTOM';
 
 export interface PeriodRange {
   vision: PeriodVision;
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
-  label: string;     // E.g. "Novembre 2026", "Semaine 45", "5 nov. 2026", "Année 2026", "Du ... au ..."
-  referenceDate: string; // YYYY-MM-DD
+  startDate: string;
+  endDate: string;
+  label: string;
+  referenceDate: string;
 }
 
 export interface StagedTransaction {
   id: string;
   date: string;
   description: string;
-  amount: number; // positive = income, negative = expense
+  amount: number;
   categoryId?: string;
   accountId: string;
   sourceType?: 'excel' | 'pdf' | 'word' | 'csv' | 'json';
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  chartData?: {
+    type: 'cashflow' | 'categories' | 'networth';
+    title: string;
+    items: Array<{ label: string; value: number; secondaryValue?: number; color?: string }>;
+  };
+  reportDownloadable?: boolean;
+}
+
+export interface AIWeeklyTip {
+  id: string;
+  title: string;
+  category: string;
+  potentialSaving: number;
+  advice: string;
+  actionLabel: string;
+  severity: 'high' | 'medium' | 'low';
+}

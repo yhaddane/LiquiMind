@@ -230,18 +230,27 @@ export const PlanView: React.FC = () => {
                           {/* Budget control & Delete */}
                           <div className="flex items-center gap-1.5 shrink-0">
                             {isEditing ? (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 <input
                                   type="number"
                                   value={editAmountStr}
                                   onChange={(e) => setEditAmountStr(e.target.value)}
                                   placeholder="0"
-                                  className="w-20 rounded-lg border border-lime-500 bg-white dark:bg-neutral-800 px-2 py-1 text-xs font-mono text-neutral-900 dark:text-white focus:outline-none"
+                                  className="w-20 rounded-lg border border-[#c4f24e] bg-white dark:bg-neutral-800 px-2 py-0.5 text-xs font-mono text-neutral-900 dark:text-white focus:outline-none"
                                   autoFocus
                                 />
                                 <button
+                                  type="button"
+                                  onClick={() => setEditAmountStr((prev) => String((parseFloat(prev) || 0) + 500))}
+                                  className="text-[10px] px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
+                                  title="+500 DH"
+                                >
+                                  +500
+                                </button>
+                                <button
                                   onClick={() => handleSaveBudget(cat.id)}
                                   className="rounded-lg btn-brand p-1 cursor-pointer"
+                                  title="Valider"
                                 >
                                   <Check className="h-3.5 w-3.5 stroke-[3]" />
                                 </button>
@@ -252,11 +261,11 @@ export const PlanView: React.FC = () => {
                                   setEditingCatId(cat.id);
                                   setEditAmountStr(String(budget));
                                 }}
-                                className="flex items-center gap-1 text-[11px] font-mono font-semibold text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-                                title="Modifier le budget de l'enveloppe"
+                                className="flex items-center gap-1 text-[11px] font-mono font-semibold text-neutral-500 hover:text-neutral-900 dark:hover:text-white group"
+                                title="Modifier le plafond budgétaire"
                               >
-                                <span>{formatCurrency(budget, userSettings.primaryCurrency)}</span>
-                                <Edit2 className="h-3 w-3 opacity-60" />
+                                <span>Plafond : {formatCurrency(budget, userSettings.primaryCurrency)}</span>
+                                <Edit2 className="h-3 w-3 opacity-60 group-hover:opacity-100" />
                               </button>
                             )}
 
@@ -274,25 +283,41 @@ export const PlanView: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Progress bar */}
-                        <div className="h-1.5 w-full rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${barBg}`}
-                            style={{ width: `${Math.min(100, percentage)}%` }}
-                          />
+                        {/* Progress bar with dynamic color */}
+                        <div className="space-y-1">
+                          <div className="h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${barBg}`}
+                              style={{ width: `${Math.min(100, percentage)}%` }}
+                            />
+                          </div>
                         </div>
 
-                        {/* Spent & Remaining text */}
-                        <div className="flex items-center justify-between text-[11px] text-neutral-400">
-                          <span>
-                            Dépensé :{' '}
-                            <strong className="text-neutral-700 dark:text-neutral-300 font-mono">
-                              {formatCurrency(spent, userSettings.primaryCurrency)}
-                            </strong>
-                          </span>
-                          <span className={isOver ? 'text-rose-500 font-bold' : ''}>
+                        {/* Spent & Remaining text & status badge */}
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-neutral-400">
+                              Dépensé :{' '}
+                              <strong className="text-neutral-700 dark:text-neutral-300 font-mono">
+                                {formatCurrency(spent, userSettings.primaryCurrency)}
+                              </strong>
+                            </span>
+                            <span
+                              className={`rounded-md px-1.5 py-0.2 text-[10px] font-bold ${
+                                isOver
+                                  ? 'bg-rose-500/20 text-rose-500'
+                                  : percentage >= 80
+                                  ? 'bg-amber-500/20 text-amber-500'
+                                  : 'bg-lime-500/20 text-lime-700 dark:text-[#c4f24e]'
+                              }`}
+                            >
+                              {percentage}%
+                            </span>
+                          </div>
+
+                          <span className={isOver ? 'text-rose-500 font-bold' : percentage >= 80 ? 'text-amber-500 font-semibold' : 'text-neutral-400'}>
                             {isOver
-                              ? `Dépassement de ${formatCurrency(Math.abs(remaining), userSettings.primaryCurrency)}`
+                              ? `+${formatCurrency(Math.abs(remaining), userSettings.primaryCurrency)} (Dépassement)`
                               : `Reste ${formatCurrency(remaining, userSettings.primaryCurrency)}`}
                           </span>
                         </div>

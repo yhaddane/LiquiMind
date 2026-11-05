@@ -17,6 +17,14 @@ import {
   RotateCcw,
   FileSpreadsheet,
   FileCheck,
+  Layers,
+  Smartphone,
+  Sparkles,
+  Cloud,
+  LogOut,
+  LogIn,
+  Plus,
+  Edit2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useI18n, LocaleCode } from '../../context/I18nContext';
@@ -27,6 +35,16 @@ export const SettingsView: React.FC = () => {
     userSettings,
     accounts,
     categories,
+    spaces,
+    updateSpace,
+    addSpace,
+    authUser,
+    loginWithGoogle,
+    logoutGoogle,
+    syncNowWithCloud,
+    isSyncingCloud,
+    setIsAIOnboardingOpen,
+    setIsAndroidModalOpen,
     setCurrency,
     setAccentColor,
     toggleTheme,
@@ -41,6 +59,15 @@ export const SettingsView: React.FC = () => {
   } = useApp();
 
   const { locale, setLocale, t } = useI18n();
+
+  const [newSpaceName, setNewSpaceName] = useState('');
+  const [newSpaceTag, setNewSpaceTag] = useState('');
+  const [newSpaceIcon, setNewSpaceIcon] = useState('💼');
+  const [isAddingSpace, setIsAddingSpace] = useState(false);
+  const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
+  const [editSpaceName, setEditSpaceName] = useState('');
+  const [editSpaceTag, setEditSpaceTag] = useState('');
+  const [editSpaceIcon, setEditSpaceIcon] = useState('');
 
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [showResetZeroConfirm, setShowResetZeroConfirm] = useState(false);
@@ -209,23 +236,256 @@ export const SettingsView: React.FC = () => {
         </p>
       </div>
 
-      {/* User Profile Card */}
+      {/* Google Auth & Firestore Cloud Sync Card */}
       <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-4">
-        <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
-          Profil utilisateur
-        </h3>
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/20 text-brand font-black text-base">
-            YH
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#c4f24e]/10 border border-[#c4f24e]/20 text-[#c4f24e]">
+              <Cloud className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <span>Authentification Google & Synchronisation Cloud</span>
+                {authUser && (
+                  <span className="rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">
+                    Connecté
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-neutral-400">
+                {authUser
+                  ? `Synchronisé en direct avec Firestore pour ${authUser.email}`
+                  : 'Connectez votre compte Google pour synchroniser instantanément sur mobile et tablette'}
+              </p>
+            </div>
           </div>
+
           <div>
-            <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
-              {userSettings.userName}
-            </h4>
-            <p className="text-xs text-neutral-400 font-mono">
-              {userSettings.email}
-            </p>
+            {authUser ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={syncNowWithCloud}
+                  disabled={isSyncingCloud}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-neutral-200 transition"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isSyncingCloud ? 'animate-spin text-[#c4f24e]' : ''}`} />
+                  <span>{isSyncingCloud ? 'Sync en cours...' : 'Synchroniser'}</span>
+                </button>
+                <button
+                  onClick={logoutGoogle}
+                  className="p-2 rounded-xl text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition"
+                  title="Se déconnecter de Google"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                disabled={isSyncingCloud}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#c4f24e] text-neutral-950 font-bold text-xs hover:bg-[#b0dc41] shadow-md transition"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Se connecter avec Google</span>
+              </button>
+            )}
           </div>
+        </div>
+
+        {authUser && authUser.lastSyncedAt && (
+          <div className="text-[11px] text-neutral-400 pt-2 border-t border-neutral-100 dark:border-neutral-800/60 flex items-center justify-between">
+            <span>Dernière synchronisation cloud réussie :</span>
+            <span className="font-mono text-emerald-400">
+              {new Date(authUser.lastSyncedAt).toLocaleTimeString('fr-FR')} &bull; Firestore actif
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Espaces de travail (Workspaces) Management Card */}
+      <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-[#c4f24e]" />
+            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+              Gestion & Renommage des Espaces ({spaces.length})
+            </h3>
+          </div>
+          <button
+            onClick={() => setIsAddingSpace(!isAddingSpace)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-xs font-semibold text-neutral-800 dark:text-neutral-200 transition"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Nouvel espace</span>
+          </button>
+        </div>
+
+        <p className="text-xs text-neutral-400">
+          Personnalisez le libellé, l'icône emoji et le tag abrégé de vos espaces personnels et professionnels (ex: Studio Nour, Projet Immobilier...).
+        </p>
+
+        {/* Existing Spaces List */}
+        <div className="space-y-2">
+          {spaces.map((s) => {
+            const isEditing = editingSpaceId === s.id;
+            return (
+              <div
+                key={s.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60"
+              >
+                {isEditing ? (
+                  <div className="flex-1 flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={editSpaceIcon}
+                      onChange={(e) => setEditSpaceIcon(e.target.value)}
+                      className="w-12 text-center rounded-lg border border-neutral-700 bg-neutral-800 py-1 text-sm text-white"
+                      placeholder="Icon"
+                    />
+                    <input
+                      type="text"
+                      value={editSpaceName}
+                      onChange={(e) => setEditSpaceName(e.target.value)}
+                      className="flex-1 min-w-[140px] rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1 text-xs text-white"
+                      placeholder="Nom de l'espace"
+                    />
+                    <input
+                      type="text"
+                      value={editSpaceTag}
+                      onChange={(e) => setEditSpaceTag(e.target.value)}
+                      className="w-20 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-white"
+                      placeholder="Tag court"
+                    />
+                    <button
+                      onClick={() => {
+                        updateSpace(s.id, {
+                          name: editSpaceName.trim() || s.name,
+                          tag: editSpaceTag.trim() || s.tag,
+                          icon: editSpaceIcon.trim() || s.icon,
+                        });
+                        setEditingSpaceId(null);
+                      }}
+                      className="px-3 py-1 rounded-lg bg-[#c4f24e] text-neutral-950 font-bold text-xs"
+                    >
+                      OK
+                    </button>
+                    <button
+                      onClick={() => setEditingSpaceId(null)}
+                      className="px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{s.icon}</span>
+                      <div>
+                        <span className="text-xs font-bold text-neutral-900 dark:text-white block">
+                          {s.name}
+                        </span>
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          Tag : {s.tag} &bull; ID : {s.id}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditingSpaceId(s.id);
+                        setEditSpaceName(s.name);
+                        setEditSpaceTag(s.tag);
+                        setEditSpaceIcon(s.icon);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium text-neutral-600 dark:text-neutral-300 transition"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                      <span>Renommer</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Space Form */}
+        {isAddingSpace && (
+          <div className="p-3 rounded-2xl border border-neutral-700 bg-neutral-900 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={newSpaceIcon}
+              onChange={(e) => setNewSpaceIcon(e.target.value)}
+              className="w-12 text-center rounded-lg border border-neutral-700 bg-neutral-800 py-1 text-sm text-white"
+              placeholder="Icon"
+            />
+            <input
+              type="text"
+              value={newSpaceName}
+              onChange={(e) => setNewSpaceName(e.target.value)}
+              className="flex-1 min-w-[140px] rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1 text-xs text-white"
+              placeholder="Nom de l'espace (ex: SCI Familiale)"
+            />
+            <input
+              type="text"
+              value={newSpaceTag}
+              onChange={(e) => setNewSpaceTag(e.target.value)}
+              className="w-20 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs text-white"
+              placeholder="Tag (ex: SCI)"
+            />
+            <button
+              onClick={() => {
+                if (!newSpaceName.trim()) return;
+                addSpace(newSpaceName, newSpaceTag, newSpaceIcon);
+                setNewSpaceName('');
+                setNewSpaceTag('');
+                setIsAddingSpace(false);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[#c4f24e] text-neutral-950 font-bold text-xs"
+            >
+              Créer l'espace
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Shortcuts & Modals Launcher Card */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-[#c4f24e]" />
+            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+              Onboarding Conversationnel IA
+            </h3>
+          </div>
+          <p className="text-xs text-neutral-400">
+            Relancez l'assistant pas à pas pour restructurer vos 8 piliers financiers en langage naturel.
+          </p>
+          <button
+            onClick={() => setIsAIOnboardingOpen(true)}
+            className="w-full py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-xs font-bold text-neutral-900 dark:text-white flex items-center justify-center gap-2 transition"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-[#c4f24e]" />
+            <span>Relancer l'Onboarding IA</span>
+          </button>
+        </div>
+
+        <div className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-[#c4f24e]" />
+            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+              Application Android Native (APK / PWA)
+            </h3>
+          </div>
+          <p className="text-xs text-neutral-400">
+            Aperçu smartphone, guide d'installation WebAPK et configuration Capacitor Android Studio.
+          </p>
+          <button
+            onClick={() => setIsAndroidModalOpen(true)}
+            className="w-full py-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-xs font-bold text-neutral-900 dark:text-white flex items-center justify-center gap-2 transition"
+          >
+            <Smartphone className="h-3.5 w-3.5 text-[#c4f24e]" />
+            <span>Ouvrir l'Espace Android</span>
+          </button>
         </div>
       </div>
 

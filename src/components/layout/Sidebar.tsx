@@ -14,6 +14,10 @@ import {
   ChevronLeft,
   ChevronRight,
   PlusCircle,
+  Sparkles,
+  LineChart,
+  Smartphone,
+  Cloud,
 } from 'lucide-react';
 import { useApp, NavTab } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
@@ -24,6 +28,9 @@ export const Sidebar: React.FC = () => {
     activeTab,
     setActiveTab,
     setIsAddTxModalOpen,
+    setIsAIOnboardingOpen,
+    setIsAndroidModalOpen,
+    authUser,
     userSettings,
     resetToDemo,
     resetToZero,
@@ -38,10 +45,12 @@ export const Sidebar: React.FC = () => {
     { id: 'plan', labelKey: 'nav.plan', icon: <CalendarRange className="h-4 w-4" />, fallback: 'Plan' },
     { id: 'transactions', labelKey: 'nav.transactions', icon: <ArrowLeftRight className="h-4 w-4" />, fallback: 'Transactions' },
     { id: 'cashflow', labelKey: 'nav.cashflowLong', icon: <TrendingUp className="h-4 w-4" />, fallback: 'Flux' },
+    { id: 'forecast', labelKey: 'nav.forecast', icon: <LineChart className="h-4 w-4" />, fallback: 'Prévisions' },
+    { id: 'assistant', labelKey: 'nav.assistant', icon: <Sparkles className="h-4 w-4 text-[#c4f24e]" />, fallback: 'Assistant IA' },
     { id: 'goals', labelKey: 'nav.goals', icon: <Target className="h-4 w-4" />, fallback: 'Objectifs' },
-    { id: 'debts', labelKey: 'nav.debts', icon: <HandCoins className="h-4 w-4" />, fallback: 'Dettes & créances' },
+    { id: 'debts', labelKey: 'nav.debts', icon: <HandCoins className="h-4 w-4" />, fallback: 'Dettes & crédits' },
     { id: 'accounts', labelKey: 'nav.accounts', icon: <Wallet className="h-4 w-4" />, fallback: 'Comptes' },
-    { id: 'assets', labelKey: 'assets.navLabel', icon: <Building2 className="h-4 w-4" />, fallback: 'Patrimoine' },
+    { id: 'assets', labelKey: 'assets.navLabel', icon: <Building2 className="h-4 w-4" />, fallback: 'Patrimoine & Bourse' },
     { id: 'recurring', labelKey: 'nav.recurring', icon: <Repeat className="h-4 w-4" />, fallback: 'Récurrents' },
     { id: 'settings', labelKey: 'nav.settings', icon: <Settings className="h-4 w-4" />, fallback: 'Paramètres' },
   ];
@@ -124,6 +133,31 @@ export const Sidebar: React.FC = () => {
         })}
       </nav>
 
+      {/* Quick Utility Banners */}
+      <div className="px-2 py-2 space-y-1.5 border-t border-neutral-200 dark:border-neutral-800/80">
+        <button
+          onClick={() => setIsAIOnboardingOpen(true)}
+          className={`flex w-full items-center gap-2 rounded-xl p-2 text-xs font-bold bg-lime-500/10 text-lime-700 dark:text-[#c4f24e] hover:bg-lime-500/20 transition cursor-pointer ${
+            collapsed ? 'justify-center px-0' : ''
+          }`}
+          title="Lancer l'Onboarding IA (8 piliers)"
+        >
+          <Sparkles className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="truncate">Onboarding IA (8 piliers)</span>}
+        </button>
+
+        <button
+          onClick={() => setIsAndroidModalOpen(true)}
+          className={`flex w-full items-center gap-2 rounded-xl p-2 text-xs font-bold border border-neutral-200 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition cursor-pointer ${
+            collapsed ? 'justify-center px-0' : ''
+          }`}
+          title="App Android APK & PWA"
+        >
+          <Smartphone className="h-4 w-4 shrink-0 text-emerald-500" />
+          {!collapsed && <span className="truncate">App Android (APK)</span>}
+        </button>
+      </div>
+
       {/* Bottom Profile / Reset Controls */}
       <div className="p-3 border-t border-neutral-200 dark:border-neutral-800/80 space-y-2 relative">
         <div
@@ -131,16 +165,21 @@ export const Sidebar: React.FC = () => {
             collapsed ? 'justify-center' : ''
           }`}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/20 text-brand font-black text-xs">
-            YH
-          </div>
+          {authUser?.photoURL ? (
+            <img src={authUser.photoURL} alt="" className="h-8 w-8 rounded-lg object-cover" />
+          ) : (
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/20 text-brand font-black text-xs">
+              {authUser ? authUser.displayName?.slice(0, 2).toUpperCase() : 'YH'}
+            </div>
+          )}
           {!collapsed && (
             <div className="flex flex-1 flex-col overflow-hidden text-left">
-              <span className="truncate text-xs font-bold text-neutral-900 dark:text-white">
-                {userSettings.userName}
+              <span className="truncate text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1">
+                {authUser?.displayName || userSettings.userName}
+                {authUser && <Cloud className="h-3 w-3 text-emerald-500 inline shrink-0" />}
               </span>
               <span className="truncate text-[10px] text-neutral-400">
-                {userSettings.email}
+                {authUser?.email || userSettings.email}
               </span>
             </div>
           )}

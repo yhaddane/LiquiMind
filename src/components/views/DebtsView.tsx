@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   HandCoins,
   Plus,
@@ -12,11 +12,16 @@ import {
   Landmark,
   Calendar,
   Percent,
+  FileSpreadsheet,
+  UploadCloud,
+  ListOrdered,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
 import { formatCurrency } from '../../utils/finance';
-import { DebtLedgerItem, Counterparty } from '../../types';
+import { DebtLedgerItem, Counterparty, AmortizationRow } from '../../types';
+import { parseAmortizationFile } from '../../utils/statementParser';
 
 export const DebtsView: React.FC = () => {
   const {
@@ -71,6 +76,43 @@ export const DebtsView: React.FC = () => {
   const [editRemainingCapital, setEditRemainingCapital] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
 
+  // Amortization Schedule viewer & uploader
+  const [viewScheduleLoan, setViewScheduleLoan] = useState<DebtLedgerItem | null>(null);
+  const [importedSchedule, setImportedSchedule] = useState<AmortizationRow[] | undefined>(undefined);
+  const [importedFileName, setImportedFileName] = useState('');
+  const [isUploadingSchedule, setIsUploadingSchedule] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetLoanId?: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingSchedule(true);
+    try {
+      const parsed = await parseAmortizationFile(file);
+      if (targetLoanId) {
+        updateDebt(targetLoanId, {
+          amortizationSchedule: parsed.rows,
+          scheduleFileName: file.name,
+          monthlyPayment: parsed.summary.monthlyPayment,
+          remainingCapital: parsed.summary.remainingCapital,
+          endDate: parsed.summary.endDate,
+        });
+      } else {
+        setNewMonthlyPayment(String(parsed.summary.monthlyPayment));
+        setNewRemainingCapital(String(parsed.summary.remainingCapital));
+        setNewAmountStr(String(parsed.summary.initialCapital));
+        setNewEndDate(parsed.summary.endDate);
+        setImportedSchedule(parsed.rows);
+        setImportedFileName(file.name);
+      }
+    } catch (err) {
+      console.error('Error parsing amortization schedule:', err);
+    } finally {
+      setIsUploadingSchedule(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   // Summaries per contact for peer-to-peer debts
   const cpSummaries = useMemo(() => {
     return counterparties
@@ -122,9 +164,13 @@ export const DebtsView: React.FC = () => {
       interestRate: newInterestRate ? parseFloat(newInterestRate) : undefined,
       remainingCapital: newRemainingCapital ? parseFloat(newRemainingCapital) : amount,
       endDate: newEndDate || undefined,
+      amortizationSchedule: importedSchedule,
+      scheduleFileName: importedFileName || undefined,
     });
 
     setIsAddModalOpen(false);
+    setImportedSchedule(undefined);
+    setImportedFileName('');
     setNewName('');
     setNewContact('');
     setNewAmountStr('');
@@ -315,79 +361,142 @@ export const DebtsView: React.FC = () => {
       {/* Bank Loans Section */}
       {(activeSubTab === 'ALL' || activeSubTab === 'BANK') && bankLoans.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Landmark className="h-4 w-4 text-rose-500" />
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
-              Crédits & Emprunts bancaires
-            </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-rose-500" />
+              <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                Crédits & Emprunts bancaires
+              </h3>
+            </div>
+            <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 font-semibold transition">
+              <UploadCloud className="h-3.5 w-3.5 text-[#c4f24e]" />
+              <span>{isUploadingSchedule ? 'Extraction en cours...' : 'Importer tableau d’amortissement'}</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv,.pdf,.txt"
+                className="hidden"
+                onChange={(e) => handleFileUpload(e)}
+              />
+            </label>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {bankLoans.map((loan) => (
-              <div
-                key={loan.id}
-                className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-4 hover:border-neutral-300 dark:hover:border-neutral-700 transition relative group"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 font-bold">
-                      <Landmark className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
-                        {loan.description}
-                      </h4>
-                      <div className="text-[11px] text-neutral-400">
-                        {loan.bankName || 'Banque partenaire'}
+            {bankLoans.map((loan) => {
+              const initial = loan.amount || 1;
+              const remaining = loan.remainingCapital ?? loan.amount;
+              const repaid = Math.max(0, initial - remaining);
+              const repaidPct = Math.min(100, Math.max(0, Math.round((repaid / initial) * 100)));
+              const hasSchedule = loan.amortizationSchedule && loan.amortizationSchedule.length > 0;
+
+              return (
+                <div
+                  key={loan.id}
+                  className="rounded-3xl border border-neutral-200 dark:border-neutral-800/80 bg-white dark:bg-[#161618] p-5 space-y-4 hover:border-neutral-300 dark:hover:border-neutral-700 transition relative group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 font-bold">
+                        <Landmark className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-neutral-900 dark:text-white">
+                          {loan.description}
+                        </h4>
+                        <div className="text-[11px] text-neutral-400">
+                          {loan.bankName || 'Banque partenaire'}
+                        </div>
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-lg bg-rose-500/10 text-rose-500 font-bold text-[10px] px-2 py-0.5 uppercase">
+                        Prêt Bancaire
+                      </span>
+                      <button
+                        onClick={() => openEditModal(loan)}
+                        className="p-1 rounded-lg text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition"
+                        title="Modifier le crédit bancaire"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="rounded-lg bg-rose-500/10 text-rose-500 font-bold text-[10px] px-2 py-0.5 uppercase">
-                      Prêt Bancaire
-                    </span>
+                  {/* Amortization Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-neutral-400 font-medium">
+                      <span>Progression du remboursement</span>
+                      <span className="font-bold text-emerald-400">{repaidPct}% remboursé</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-[#c4f24e] transition-all duration-500"
+                        style={{ width: `${repaidPct}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-neutral-500">
+                      <span>Amorti : {formatCurrency(repaid, userSettings.primaryCurrency)}</span>
+                      <span>Initial : {formatCurrency(initial, userSettings.primaryCurrency)}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-neutral-100 dark:border-neutral-800/60 text-xs">
+                    <div>
+                      <span className="text-[10px] text-neutral-400 block">Capital restant dû</span>
+                      <span className="font-mono text-base font-black text-rose-500">
+                        {formatCurrency(remaining, userSettings.primaryCurrency)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-neutral-400 block">Mensualité</span>
+                      <span className="font-mono text-base font-bold text-neutral-800 dark:text-neutral-200">
+                        {loan.monthlyPayment ? formatCurrency(loan.monthlyPayment, userSettings.primaryCurrency) : '—'} /mois
+                      </span>
+                    </div>
+
+                    {loan.interestRate && (
+                      <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+                        <Percent className="h-3 w-3" />
+                        <span>Taux fixe : {loan.interestRate}%</span>
+                      </div>
+                    )}
+
+                    {loan.endDate && (
+                      <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+                        <Calendar className="h-3 w-3" />
+                        <span>Fin : {loan.endDate}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Schedule Actions */}
+                  <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800/60 flex items-center justify-between gap-2">
                     <button
-                      onClick={() => openEditModal(loan)}
-                      className="p-1 rounded-lg text-neutral-400 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition"
-                      title="Modifier le crédit bancaire"
+                      onClick={() => setViewScheduleLoan(loan)}
+                      className="flex-1 py-1.5 px-3 rounded-xl bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
                     >
-                      <Edit2 className="h-3.5 w-3.5" />
+                      <ListOrdered className="h-3.5 w-3.5 text-[#c4f24e]" />
+                      <span>
+                        {hasSchedule
+                          ? `Consulter l'échéancier (${loan.amortizationSchedule!.length} mensualités)`
+                          : `Générer / Voir l'échéancier`}
+                      </span>
                     </button>
+
+                    <label className="cursor-pointer p-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 text-neutral-500 hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition" title="Mettre à jour via un fichier Excel ou CSV">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(e, loan.id)}
+                      />
+                    </label>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-neutral-100 dark:border-neutral-800/60 text-xs">
-                  <div>
-                    <span className="text-[10px] text-neutral-400 block">Capital restant dû</span>
-                    <span className="font-mono text-base font-black text-rose-500">
-                      {formatCurrency(loan.remainingCapital ?? loan.amount, userSettings.primaryCurrency)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] text-neutral-400 block">Mensualité</span>
-                    <span className="font-mono text-base font-bold text-neutral-800 dark:text-neutral-200">
-                      {loan.monthlyPayment ? formatCurrency(loan.monthlyPayment, userSettings.primaryCurrency) : '—'} /mois
-                    </span>
-                  </div>
-
-                  {loan.interestRate && (
-                    <div className="flex items-center gap-1 text-[11px] text-neutral-400">
-                      <Percent className="h-3 w-3" />
-                      <span>Taux fixe : {loan.interestRate}%</span>
-                    </div>
-                  )}
-
-                  {loan.endDate && (
-                    <div className="flex items-center gap-1 text-[11px] text-neutral-400">
-                      <Calendar className="h-3 w-3" />
-                      <span>Fin : {loan.endDate}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1022,6 +1131,131 @@ export const DebtsView: React.FC = () => {
                 Valider le remboursement
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Amortization Schedule Detail Modal */}
+      {viewScheduleLoan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="relative flex flex-col w-full max-w-4xl max-h-[90vh] rounded-3xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-[#161618] shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-[#121214]">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 font-bold">
+                  <Landmark className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                    Tableau d'amortissement — {viewScheduleLoan.description}
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    {viewScheduleLoan.bankName || 'Banque'} &bull; Capital restant : {formatCurrency(viewScheduleLoan.remainingCapital ?? viewScheduleLoan.amount, userSettings.primaryCurrency)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 text-xs text-neutral-800 dark:text-neutral-200 font-semibold transition">
+                  <UploadCloud className="h-3.5 w-3.5 text-[#c4f24e]" />
+                  <span>Réimporter (.xlsx, .csv)</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={(e) => handleFileUpload(e, viewScheduleLoan.id)}
+                  />
+                </label>
+                <button
+                  onClick={() => setViewScheduleLoan(null)}
+                  className="rounded-full p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Schedule Table */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {(!viewScheduleLoan.amortizationSchedule || viewScheduleLoan.amortizationSchedule.length === 0) ? (
+                <div className="text-center py-12">
+                  <FileSpreadsheet className="h-12 w-12 text-neutral-500 mx-auto mb-3" />
+                  <h4 className="text-sm font-bold text-white mb-1">Aucun tableau d'amortissement importé</h4>
+                  <p className="text-xs text-neutral-400 max-w-sm mx-auto mb-4">
+                    Importez le relevé ou tableau d'amortissement fourni par votre banque pour suivre l'échéancier exact mensualité par mensualité.
+                  </p>
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#c4f24e] text-neutral-950 text-xs font-bold hover:bg-[#b0dc41] transition">
+                    <UploadCloud className="h-4 w-4" />
+                    <span>Sélectionner le fichier Excel / CSV</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e, viewScheduleLoan.id)}
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-neutral-100 dark:bg-[#18181c] text-neutral-500 dark:text-neutral-400 border-b border-neutral-200 dark:border-neutral-800">
+                      <tr>
+                        <th className="py-2.5 px-3 font-semibold">N°</th>
+                        <th className="py-2.5 px-3 font-semibold">Date d'échéance</th>
+                        <th className="py-2.5 px-3 font-semibold">Mensualité</th>
+                        <th className="py-2.5 px-3 font-semibold text-emerald-400">Capital amorti</th>
+                        <th className="py-2.5 px-3 font-semibold text-rose-400">Intérêts</th>
+                        <th className="py-2.5 px-3 font-semibold">Assurance</th>
+                        <th className="py-2.5 px-3 font-semibold">Capital restant</th>
+                        <th className="py-2.5 px-3 font-semibold text-right">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/60 font-mono">
+                      {viewScheduleLoan.amortizationSchedule.map((row) => (
+                        <tr
+                          key={row.installmentNumber}
+                          className={`hover:bg-neutral-800/30 transition ${
+                            row.isPaid ? 'opacity-60 bg-neutral-900/40' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 text-neutral-400">{row.installmentNumber}</td>
+                          <td className="py-2.5 px-3 font-sans font-medium text-neutral-800 dark:text-neutral-200">
+                            {row.dueDate}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-neutral-900 dark:text-white">
+                            {formatCurrency(row.payment, userSettings.primaryCurrency)}
+                          </td>
+                          <td className="py-2.5 px-3 text-emerald-400 font-semibold">
+                            {formatCurrency(row.principal, userSettings.primaryCurrency)}
+                          </td>
+                          <td className="py-2.5 px-3 text-rose-400">
+                            {formatCurrency(row.interest, userSettings.primaryCurrency)}
+                          </td>
+                          <td className="py-2.5 px-3 text-neutral-400">
+                            {formatCurrency(row.insurance, userSettings.primaryCurrency)}
+                          </td>
+                          <td className="py-2.5 px-3 font-black text-neutral-800 dark:text-neutral-100">
+                            {formatCurrency(row.remainingBalance, userSettings.primaryCurrency)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-sans">
+                            {row.isPaid ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-400 px-2 py-0.5 text-[10px] font-bold">
+                                <Check className="h-3 w-3" />
+                                Payée
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-neutral-800 text-neutral-300 px-2 py-0.5 text-[10px] font-bold">
+                                À échoir
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

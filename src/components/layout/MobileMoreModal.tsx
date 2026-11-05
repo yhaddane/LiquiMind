@@ -8,7 +8,9 @@ import {
   Building2,
   Repeat,
   Settings,
-  ShieldCheck,
+  LineChart,
+  Sparkles,
+  Smartphone,
 } from 'lucide-react';
 import { useApp, NavTab } from '../../context/AppContext';
 import { useI18n } from '../../context/I18nContext';
@@ -17,12 +19,14 @@ export const MobileMoreModal: React.FC<{ isOpen: boolean; onClose: () => void }>
   isOpen,
   onClose,
 }) => {
-  const { setActiveTab } = useApp();
+  const { setActiveTab, setIsAIOnboardingOpen, setIsAndroidModalOpen } = useApp();
   const { t } = useI18n();
 
   if (!isOpen) return null;
 
   const moreItems: { id: NavTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'forecast', label: 'Prévisions trésorerie', icon: <LineChart className="h-5 w-5" /> },
+    { id: 'assistant', label: 'Assistant IA & Rapports', icon: <Sparkles className="h-5 w-5 text-[#c4f24e]" /> },
     { id: 'cashflow', label: t('nav.cashflowLong') || 'Flux de trésorerie', icon: <TrendingUp className="h-5 w-5" /> },
     { id: 'goals', label: t('nav.goals') || 'Objectifs d’épargne', icon: <Target className="h-5 w-5" /> },
     { id: 'debts', label: t('nav.debts') || 'Dettes & créances', icon: <HandCoins className="h-5 w-5" /> },
@@ -52,7 +56,31 @@ export const MobileMoreModal: React.FC<{ isOpen: boolean; onClose: () => void }>
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 pt-4 max-h-[70vh] overflow-y-auto">
+        {/* Quick Launch Banners */}
+        <div className="grid grid-cols-2 gap-2 pt-3">
+          <button
+            onClick={() => {
+              onClose();
+              setIsAIOnboardingOpen(true);
+            }}
+            className="flex items-center gap-2 p-2.5 rounded-2xl bg-lime-500/10 border border-lime-500/20 text-lime-700 dark:text-[#c4f24e] text-xs font-bold"
+          >
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span className="truncate">Onboarding IA</span>
+          </button>
+          <button
+            onClick={() => {
+              onClose();
+              setIsAndroidModalOpen(true);
+            }}
+            className="flex items-center gap-2 p-2.5 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-bold"
+          >
+            <Smartphone className="h-4 w-4 shrink-0 text-emerald-500" />
+            <span className="truncate">App Android</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 pt-3 max-h-[60vh] overflow-y-auto">
           {moreItems.map((it) => (
             <button
               key={it.id}

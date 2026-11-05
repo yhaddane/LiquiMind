@@ -11,6 +11,7 @@ import {
   RecurringItem,
   UserSettings,
   NotificationItem,
+  AmortizationRow,
 } from '../types';
 
 export const INITIAL_SPACES: Space[] = [
@@ -64,11 +65,11 @@ export const INITIAL_ACCOUNTS: Account[] = [
 export const INITIAL_CATEGORIES: Category[] = [
   // Personal Income
   { id: 'cat_salary', spaceId: 'personal', name: 'Salaire', kind: 'FIXED_INCOME', direction: 'IN', icon: '💼', expectedAmount: 21000, order: 1 },
-  { id: 'cat_family', spaceId: 'personal', name: 'Allocations familiales', kind: 'FIXED_INCOME', direction: 'IN', icon: '👨‍👩‍👧', expectedAmount: 300, order: 2 },
+  { id: 'cat_family', spaceId: 'personal', name: 'Allocations familiales', kind: 'FIXED_INCOME', direction: 'IN', icon: '👨👩👧', expectedAmount: 300, order: 2 },
   { id: 'cat_gifts_in', spaceId: 'personal', name: 'Cadeaux reçus', kind: 'INCOME', direction: 'IN', icon: '🎁', order: 3 },
 
   // Personal Fixed Expenses Group
-  { id: 'group_fixed', spaceId: 'personal', name: 'Dépenses fixes', isGroup: true, icon: '📌', order: 10 },
+  { id: 'group_fixed', spaceId: 'personal', name: 'Dépenses fixes', isGroup: true, kind: 'FIXED_EXPENSE', icon: '📌', order: 10 },
   { id: 'cat_rent', parentId: 'group_fixed', spaceId: 'personal', name: 'Loyer', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🏠', expectedAmount: 4200, order: 11 },
   { id: 'cat_utilities', parentId: 'group_fixed', spaceId: 'personal', name: 'Eau & électricité', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🔌', expectedAmount: 550, order: 12 },
   { id: 'cat_internet', parentId: 'group_fixed', spaceId: 'personal', name: 'Internet fibre', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🛜', expectedAmount: 399, order: 13 },
@@ -80,7 +81,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   { id: 'cat_parents', parentId: 'group_fixed', spaceId: 'personal', name: 'Aide aux parents', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🤲', expectedAmount: 800, order: 19 },
 
   // Personal Variable Expenses Group
-  { id: 'group_variable', spaceId: 'personal', name: 'Dépenses variables', isGroup: true, icon: '🧺', order: 30 },
+  { id: 'group_variable', spaceId: 'personal', name: 'Dépenses variables', isGroup: true, kind: 'VARIABLE_EXPENSE', icon: '🧺', order: 30 },
   { id: 'cat_groceries', parentId: 'group_variable', spaceId: 'personal', name: 'Courses', kind: 'VARIABLE_EXPENSE', direction: 'OUT', icon: '🛒', expectedAmount: 2500, order: 31 },
   { id: 'cat_bakery', parentId: 'group_variable', spaceId: 'personal', name: 'Boulangerie', kind: 'VARIABLE_EXPENSE', direction: 'OUT', icon: '🥖', expectedAmount: 200, order: 32 },
   { id: 'cat_cafe', parentId: 'group_variable', spaceId: 'personal', name: 'Café', kind: 'VARIABLE_EXPENSE', direction: 'OUT', icon: '☕', expectedAmount: 350, order: 33 },
@@ -98,7 +99,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   // Pro Income & Expenses
   { id: 'cat_pro_retainer', spaceId: 'pro', name: 'Abonnements mensuels', kind: 'FIXED_INCOME', direction: 'IN', icon: '🤝', expectedAmount: 6000, order: 50 },
   { id: 'cat_pro_clients', spaceId: 'pro', name: 'Factures clients', kind: 'INCOME', direction: 'IN', icon: '💻', order: 51 },
-  { id: 'group_pro_fixed', spaceId: 'pro', name: 'Charges fixes pro', isGroup: true, icon: '📌', order: 60 },
+  { id: 'group_pro_fixed', spaceId: 'pro', name: 'Charges fixes pro', isGroup: true, kind: 'FIXED_EXPENSE', icon: '📌', order: 60 },
   { id: 'cat_pro_coworking', parentId: 'group_pro_fixed', spaceId: 'pro', name: 'Coworking Technopark', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🏢', expectedAmount: 1500, order: 61 },
   { id: 'cat_pro_software', parentId: 'group_pro_fixed', spaceId: 'pro', name: 'Logiciels (Adobe, Figma)', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🧩', expectedAmount: 450, order: 62 },
   { id: 'cat_pro_accountant', parentId: 'group_pro_fixed', spaceId: 'pro', name: 'Cabinet comptable', kind: 'FIXED_EXPENSE', direction: 'OUT', icon: '🧾', expectedAmount: 800, order: 63 },
@@ -117,7 +118,7 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
   { id: 'tx_8', accountId: 'acc_checking', categoryId: 'cat_fuel', spaceId: 'personal', date: '2026-11-04', amount: -350, currency: 'MAD', description: 'Station Afriquia Zerktouni' },
   { id: 'tx_9', accountId: 'acc_cash', categoryId: 'cat_cafe', spaceId: 'personal', date: '2026-11-05', amount: -28, currency: 'MAD', description: 'Café Bianca' },
   { id: 'tx_10', accountId: 'acc_checking', categoryId: 'cat_delivery', spaceId: 'personal', date: '2026-11-04', amount: -120, currency: 'MAD', description: 'Glovo Burger & Co' },
-  
+
   // Pro transactions
   { id: 'tx_p1', accountId: 'acc_pro', categoryId: 'cat_pro_retainer', spaceId: 'pro', date: '2026-11-05', amount: 6000, currency: 'MAD', description: 'Riad Zitoun — abonnement mensuel', isRecurring: true },
   { id: 'tx_p2', accountId: 'acc_pro', categoryId: 'cat_pro_coworking', spaceId: 'pro', date: '2026-11-02', amount: -1500, currency: 'MAD', description: 'Technopark — poste coworking', isRecurring: true },
@@ -151,6 +152,15 @@ export const INITIAL_COUNTERPARTIES: Counterparty[] = [
   { id: 'cp_bank_1', name: 'Attijariwafa Bank', kind: 'BANK', contact: '05 22 29 88 88' },
 ];
 
+const SAMPLE_AMORTIZATION: AmortizationRow[] = [
+  { installmentNumber: 41, dueDate: '2026-09-15', payment: 3850, principal: 2320, interest: 1380, insurance: 150, remainingBalance: 389660, isPaid: true },
+  { installmentNumber: 42, dueDate: '2026-10-15', payment: 3850, principal: 2330, interest: 1370, insurance: 150, remainingBalance: 387330, isPaid: true },
+  { installmentNumber: 43, dueDate: '2026-11-15', payment: 3850, principal: 2330, interest: 1370, insurance: 150, remainingBalance: 385000, isPaid: false },
+  { installmentNumber: 44, dueDate: '2026-12-15', payment: 3850, principal: 2342, interest: 1358, insurance: 150, remainingBalance: 382658, isPaid: false },
+  { installmentNumber: 45, dueDate: '2027-01-15', payment: 3850, principal: 2350, interest: 1350, insurance: 150, remainingBalance: 380308, isPaid: false },
+  { installmentNumber: 46, dueDate: '2027-02-15', payment: 3850, principal: 2360, interest: 1340, insurance: 150, remainingBalance: 377948, isPaid: false },
+];
+
 export const INITIAL_DEBT_LEDGER: DebtLedgerItem[] = [
   { id: 'dl_1', counterpartyId: 'cp_1', spaceId: 'personal', date: '2026-09-15', type: 'CREDIT_GIVEN', amount: 2000, currency: 'MAD', description: 'Prêt amical pour avance travaux' },
   { id: 'dl_2', counterpartyId: 'cp_1', spaceId: 'personal', date: '2026-10-20', type: 'CREDIT_REPAID', amount: 1000, currency: 'MAD', description: 'Premier remboursement virement' },
@@ -170,6 +180,8 @@ export const INITIAL_DEBT_LEDGER: DebtLedgerItem[] = [
     interestRate: 4.25,
     remainingCapital: 385000,
     endDate: '2038-04-30',
+    amortizationSchedule: SAMPLE_AMORTIZATION,
+    scheduleFileName: 'Echeancier_Attijari_Maarif.xlsx',
   },
 ];
 
@@ -181,6 +193,7 @@ export const INITIAL_GOALS: Goal[] = [
     icon: '🚨',
     targetAmount: 40000,
     allocated: 20000,
+    deadline: '2027-09-01',
     priority: 1,
   },
   {
@@ -200,7 +213,7 @@ export const INITIAL_GOALS: Goal[] = [
     icon: '🐑',
     targetAmount: 5000,
     allocated: 3500,
-    deadline: '2027-06-05',
+    deadline: '2027-05-25',
     priority: 3,
   },
 ];
@@ -211,6 +224,7 @@ export const INITIAL_ASSETS: Asset[] = [
     name: 'Appartement Maârif (Casablanca)',
     category: 'REAL_ESTATE',
     value: 1200000,
+    purchaseValue: 1050000,
     currency: 'MAD',
     color: '#b3dd62',
     location: 'Quartier Maârif, Casablanca',
@@ -218,18 +232,52 @@ export const INITIAL_ASSETS: Asset[] = [
   },
   {
     id: 'ast_2',
-    name: 'Actions BVC & OPCVM Actions',
+    name: 'Portefeuille BVC & OPCVM Actions',
     category: 'STOCKS',
-    value: 85000,
+    value: 92450,
+    purchaseValue: 78500,
     currency: 'MAD',
     color: '#6fa89a',
-    notes: 'Portefeuille Bourse de Casablanca (Attijari, Maroc Telecom, BCP)',
+    notes: 'Bourse de Casablanca & OPCVM CDG / Wafa Gestion',
+    holdings: [
+      {
+        id: 'h_atw',
+        symbol: 'ATW',
+        name: 'Attijariwafa Bank',
+        instrumentType: 'STOCK',
+        quantity: 60,
+        buyPrice: 465,
+        currentPrice: 548,
+        lastUpdated: '2026-11-05',
+      },
+      {
+        id: 'h_iam',
+        symbol: 'IAM',
+        name: 'Itissalat Al-Maghrib (Maroc Telecom)',
+        instrumentType: 'STOCK',
+        quantity: 150,
+        buyPrice: 92,
+        currentPrice: 99.5,
+        lastUpdated: '2026-11-05',
+      },
+      {
+        id: 'h_opcvm_1',
+        symbol: 'WAFA-ACT',
+        name: 'FCP Wafa Actions Croissance (OPCVM)',
+        instrumentType: 'OPCVM',
+        quantity: 25,
+        buyPrice: 1472,
+        currentPrice: 1785.8,
+        lastUpdated: '2026-11-05',
+      },
+    ],
   },
   {
     id: 'ast_3',
-    name: 'Or d’investissement & Bijoux',
+    name: 'Or d’investissement & Bijoux 18K/24K',
     category: 'GOLD',
     value: 45000,
+    purchaseValue: 36000,
     currency: 'MAD',
     color: '#ddad71',
     notes: 'Lingotins 50g + pièces Napoléon',
@@ -253,7 +301,7 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
     id: 'notif_1',
     title: 'Bienvenue sur LiquiMind',
-    message: 'Vos comptes et votre budget sont prêts. Notez vos dépenses en moins de 3 secondes avec LiquiMind !',
+    message: 'Vos comptes, l’assistant IA, vos prévisions et votre bourse en temps réel sont prêts !',
     date: '2026-11-01',
     read: false,
     type: 'success',
@@ -277,6 +325,7 @@ export const INITIAL_USER_SETTINGS: UserSettings = {
   accentColor: '#c4f24e',
   hideAmounts: false,
   onboardingCompleted: true,
+  aiOnboardingPromptSeen: false,
   activeSpaceId: 'all',
   streakDays: 14,
   lastActivityDate: '2026-11-05',

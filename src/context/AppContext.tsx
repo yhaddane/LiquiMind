@@ -16,6 +16,9 @@ import {
   PeriodVision,
   PeriodRange,
   StagedTransaction,
+  AuthUser,
+  ChatMessage,
+  AmortizationRow,
 } from '../types';
 import {
   INITIAL_SPACES,
@@ -32,12 +35,20 @@ import {
   INITIAL_USER_SETTINGS,
 } from '../data/initialData';
 import { getPeriodRange, navigatePeriod, isDateInPeriod } from '../utils/finance';
+import {
+  signInWithGoogleFirebase,
+  signOutFirebase,
+  syncDataToFirestore,
+  loadDataFromFirestore,
+} from '../services/firebase';
 
 export type NavTab =
   | 'dashboard'
   | 'plan'
   | 'transactions'
   | 'cashflow'
+  | 'forecast'
+  | 'assistant'
   | 'goals'
   | 'debts'
   | 'accounts'
@@ -56,12 +67,17 @@ export interface NewDebtData {
   interestRate?: number;
   remainingCapital?: number;
   endDate?: string;
+  amortizationSchedule?: AmortizationRow[];
+  scheduleFileName?: string;
 }
 
 interface AppContextType {
   spaces: Space[];
   activeSpaceId: SpaceId | 'all';
   setActiveSpaceId: (s: SpaceId | 'all') => void;
+  updateSpace: (id: SpaceId, updates: Partial<Space>) => void;
+  addSpace: (name: string, tag: string, icon: string) => void;
+
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
@@ -73,6 +89,23 @@ interface AppContextType {
   recurring: RecurringItem[];
   notifications: NotificationItem[];
   userSettings: UserSettings;
+
+  // Auth & Cloud Sync (Google / Firebase Firestore)
+  authUser: AuthUser | null;
+  isSyncingCloud: boolean;
+  loginWithGoogle: () => Promise<void>;
+  logoutGoogle: () => Promise<void>;
+  syncNowWithCloud: () => Promise<void>;
+
+  // AI Conversational Onboarding & Assistant
+  isAIOnboardingOpen: boolean;
+  setIsAIOnboardingOpen: (open: boolean) => void;
+  isAndroidModalOpen: boolean;
+  setIsAndroidModalOpen: (open: boolean) => void;
+  chatHistory: ChatMessage[];
+  setChatHistory: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  clearChatHistory: () => void;
+
   selectedMonth: string;
   setSelectedMonth: (m: string) => void;
   activeTab: NavTab;
@@ -84,7 +117,7 @@ interface AppContextType {
   isNotificationsOpen: boolean;
   setIsNotificationsOpen: (open: boolean) => void;
 
-  // Period Vision (Daily, Weekly, Monthly, Yearly, Custom)
+  // Period Vision
   periodRange: PeriodRange;
   setPeriodVision: (vision: PeriodVision) => void;
   setPeriodReferenceDate: (date: string) => void;
@@ -96,7 +129,7 @@ interface AppContextType {
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
   deleteTransaction: (id: string) => void;
   updateTransaction: (tx: Transaction) => void;
-  addBudget: (categoryId: string, amount: number) => void;
+  addBudget: (categoryId: string, amount: number, monthOverride?: string) => void;
 
   // Category CRUD & Modal
   isAddCategoryModalOpen: boolean;
@@ -133,15 +166,10 @@ interface AppContextType {
   addDebt: (data: NewDebtData) => void;
   updateDebt: (id: string, updates: Partial<DebtLedgerItem>, counterpartyName?: string, contact?: string) => void;
   deleteDebt: (id: string) => void;
-  repayDebt: (
-    counterpartyId: string,
-    amount: number,
-    accountId: string,
-    description: string
-  ) => void;
+  repayDebt: (counterpartyId: string, amount: number, accountId: string, description: string) => void;
 
   // Accounts CRUD
-  addAccount: (acc: Omit<Account, 'id'>) => void;
+  addAccount: (acc: Omit<Account, 'id'>) => string;
   updateAccount: (acc: Account) => void;
   deleteAccount: (id: string) => void;
   transferBetweenAccounts: (fromId: string, toId: string, amount: number, note?: string) => void;
@@ -162,6 +190,7 @@ interface AppContextType {
   toggleTheme: () => void;
   setCurrency: (currency: string) => void;
   setAccentColor: (color: string) => void;
+  markAIOnboardingSeen: () => void;
   markNotificationRead: (id: string) => void;
   clearAllNotifications: () => void;
   resetToDemo: () => void;
@@ -169,7 +198,6 @@ interface AppContextType {
   exportDataJson: () => string;
   importDataJson: (json: string) => boolean;
 
-  // Filter state for transactions
   txTypeFilter: 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER';
   setTxTypeFilter: (f: 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER') => void;
 }
@@ -180,7 +208,7 @@ function loadStorage<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(`tresoria_${key}`);
     return item ? JSON.parse(item) : fallback;
-  } catch (e) {
+  } catch {
     return fallback;
   }
 }
@@ -188,63 +216,60 @@ function loadStorage<T>(key: string, fallback: T): T {
 function saveStorage<T>(key: string, data: T) {
   try {
     localStorage.setItem(`tresoria_${key}`, JSON.stringify(data));
-  } catch (e) {}
+  } catch {}
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [spaces] = useState<Space[]>(INITIAL_SPACES);
+  const [spaces, setSpaces] = useState<Space[]>(() => loadStorage('spaces', INITIAL_SPACES));
   const [activeSpaceId, setActiveSpaceId] = useState<SpaceId | 'all'>('all');
 
-  const [accounts, setAccounts] = useState<Account[]>(() =>
-    loadStorage('accounts', INITIAL_ACCOUNTS)
-  );
-  const [categories, setCategories] = useState<Category[]>(() =>
-    loadStorage('categories', INITIAL_CATEGORIES)
-  );
-  const [transactions, setTransactions] = useState<Transaction[]>(() =>
-    loadStorage('transactions', INITIAL_TRANSACTIONS)
-  );
-  const [budgets, setBudgets] = useState<BudgetEnvelope[]>(() =>
-    loadStorage('budgets', INITIAL_BUDGETS)
-  );
-  const [counterparties, setCounterparties] = useState<Counterparty[]>(() =>
-    loadStorage('counterparties', INITIAL_COUNTERPARTIES)
-  );
-  const [debtLedger, setDebtLedger] = useState<DebtLedgerItem[]>(() =>
-    loadStorage('debtLedger', INITIAL_DEBT_LEDGER)
-  );
-  const [goals, setGoals] = useState<Goal[]>(() =>
-    loadStorage('goals', INITIAL_GOALS)
-  );
-  const [assets, setAssets] = useState<Asset[]>(() =>
-    loadStorage('assets', INITIAL_ASSETS)
-  );
-  const [recurring, setRecurring] = useState<RecurringItem[]>(() =>
-    loadStorage('recurring', INITIAL_RECURRING)
-  );
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
-    loadStorage('notifications', INITIAL_NOTIFICATIONS)
-  );
-  const [userSettings, setUserSettings] = useState<UserSettings>(() =>
-    loadStorage('userSettings', INITIAL_USER_SETTINGS)
+  const [accounts, setAccounts] = useState<Account[]>(() => loadStorage('accounts', INITIAL_ACCOUNTS));
+  const [categories, setCategories] = useState<Category[]>(() => loadStorage('categories', INITIAL_CATEGORIES));
+  const [transactions, setTransactions] = useState<Transaction[]>(() => loadStorage('transactions', INITIAL_TRANSACTIONS));
+  const [budgets, setBudgets] = useState<BudgetEnvelope[]>(() => loadStorage('budgets', INITIAL_BUDGETS));
+  const [counterparties, setCounterparties] = useState<Counterparty[]>(() => loadStorage('counterparties', INITIAL_COUNTERPARTIES));
+  const [debtLedger, setDebtLedger] = useState<DebtLedgerItem[]>(() => loadStorage('debtLedger', INITIAL_DEBT_LEDGER));
+  const [goals, setGoals] = useState<Goal[]>(() => loadStorage('goals', INITIAL_GOALS));
+  const [assets, setAssets] = useState<Asset[]>(() => loadStorage('assets', INITIAL_ASSETS));
+  const [recurring, setRecurring] = useState<RecurringItem[]>(() => loadStorage('recurring', INITIAL_RECURRING));
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStorage('notifications', INITIAL_NOTIFICATIONS));
+  const [userSettings, setUserSettings] = useState<UserSettings>(() => loadStorage('userSettings', INITIAL_USER_SETTINGS));
+
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => loadStorage('authUser', null));
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  // Open AI Onboarding at launch if not seen yet
+  const [isAIOnboardingOpen, setIsAIOnboardingOpen] = useState<boolean>(() => {
+    const saved = loadStorage('userSettings', INITIAL_USER_SETTINGS);
+    return !saved.aiOnboardingPromptSeen;
+  });
+
+  const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() =>
+    loadStorage('chatHistory', [
+      {
+        id: 'welcome_msg',
+        role: 'assistant',
+        content:
+          "Bonjour ! Je suis votre Assistant Financier LiquiMind. Je connais vos comptes, budgets, dettes, prévisions et investissements en temps réel. Posez-moi n'importe quelle question ou demandez-moi un graphique ou un rapport d'analyse !",
+        timestamp: new Date().toISOString(),
+      },
+    ])
   );
 
   const [selectedMonth, setSelectedMonth] = useState<string>('2026-11');
-  const [periodRange, setPeriodRange] = useState<PeriodRange>(() =>
-    getPeriodRange('MONTHLY', '2026-11-05')
-  );
+  const [periodRange, setPeriodRange] = useState<PeriodRange>(() => getPeriodRange('MONTHLY', '2026-11-05'));
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER'>('ALL');
   const [isAddTxModalOpen, setIsAddTxModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
-  // Staged import & Export Modals
   const [isStatementReviewOpen, setIsStatementReviewOpen] = useState(false);
   const [stagedTransactions, setStagedTransactions] = useState<StagedTransaction[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-  // Category Modal & Management
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
   const [addCategoryDefaultKind, setAddCategoryDefaultKind] = useState<'FIXED_EXPENSE' | 'VARIABLE_EXPENSE'>('VARIABLE_EXPENSE');
 
@@ -253,12 +278,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAddCategoryModalOpen(true);
   };
 
+  // Spaces CRUD
+  const updateSpace = (id: SpaceId, updates: Partial<Space>) => {
+    setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  };
+
+  const addSpace = (name: string, tag: string, icon: string) => {
+    const id = `space_${Date.now()}`;
+    setSpaces((prev) => [...prev, { id, name: name.trim(), tag: tag.trim() || 'Perso', icon: icon || '✨' }]);
+  };
+
   const addCategory = (catData: Omit<Category, 'id'>): string => {
-    const id = `cat_${Date.now()}`;
-    const newCategory: Category = {
-      ...catData,
-      id,
-    };
+    const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newCategory: Category = { ...catData, id };
     setCategories((prev) => [...prev, newCategory]);
     return id;
   };
@@ -268,7 +300,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBudgets((prev) => prev.filter((b) => b.categoryId !== id));
   };
 
-  // Sync to storage
+  // Sync to localStorage
+  useEffect(() => saveStorage('spaces', spaces), [spaces]);
   useEffect(() => saveStorage('accounts', accounts), [accounts]);
   useEffect(() => saveStorage('categories', categories), [categories]);
   useEffect(() => saveStorage('transactions', transactions), [transactions]);
@@ -279,6 +312,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('assets', assets), [assets]);
   useEffect(() => saveStorage('recurring', recurring), [recurring]);
   useEffect(() => saveStorage('notifications', notifications), [notifications]);
+  useEffect(() => saveStorage('authUser', authUser), [authUser]);
+  useEffect(() => saveStorage('chatHistory', chatHistory), [chatHistory]);
+
   useEffect(() => {
     saveStorage('userSettings', userSettings);
     if (userSettings.theme === 'dark') {
@@ -287,10 +323,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       document.documentElement.classList.remove('dark');
     }
 
-    // Apply custom brand accent color
     const accent = userSettings.accentColor || '#c4f24e';
     document.documentElement.style.setProperty('--brand-primary', accent);
-    // Calculate contrast text
     const cleanHex = accent.replace('#', '');
     const r = parseInt(cleanHex.substring(0, 2), 16) || 196;
     const g = parseInt(cleanHex.substring(2, 4), 16) || 242;
@@ -300,7 +334,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.style.setProperty('--brand-primary-text', textColor);
   }, [userSettings]);
 
-  // Global keyboard shortcuts (Cmd+K for search)
+  // Automatic Cloud Sync when logged in with Google
+  useEffect(() => {
+    if (!authUser) return;
+    const timer = setTimeout(() => {
+      syncDataToFirestore(authUser.uid, {
+        spaces,
+        accounts,
+        categories,
+        transactions,
+        budgets,
+        counterparties,
+        debtLedger,
+        goals,
+        assets,
+        recurring,
+        userSettings,
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [authUser, spaces, accounts, categories, transactions, budgets, counterparties, debtLedger, goals, assets, recurring, userSettings]);
+
+  const loginWithGoogle = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const user = await signInWithGoogleFirebase();
+      setAuthUser(user);
+      setUserSettings((prev) => ({
+        ...prev,
+        userName: user.displayName,
+        email: user.email,
+      }));
+
+      // Check if user has cloud data stored in Firestore
+      const cloudData = await loadDataFromFirestore(user.uid);
+      if (cloudData && Array.isArray(cloudData.accounts) && cloudData.accounts.length > 0) {
+        if (cloudData.spaces) setSpaces(cloudData.spaces);
+        if (cloudData.accounts) setAccounts(cloudData.accounts);
+        if (cloudData.categories) setCategories(cloudData.categories);
+        if (cloudData.transactions) setTransactions(cloudData.transactions);
+        if (cloudData.budgets) setBudgets(cloudData.budgets);
+        if (cloudData.counterparties) setCounterparties(cloudData.counterparties);
+        if (cloudData.debtLedger) setDebtLedger(cloudData.debtLedger);
+        if (cloudData.goals) setGoals(cloudData.goals);
+        if (cloudData.assets) setAssets(cloudData.assets);
+        if (cloudData.recurring) setRecurring(cloudData.recurring);
+      } else {
+        await syncDataToFirestore(user.uid, {
+          spaces,
+          accounts,
+          categories,
+          transactions,
+          budgets,
+          counterparties,
+          debtLedger,
+          goals,
+          assets,
+          recurring,
+          userSettings,
+        });
+      }
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const logoutGoogle = async () => {
+    await signOutFirebase();
+    setAuthUser(null);
+  };
+
+  const syncNowWithCloud = async () => {
+    if (!authUser) return;
+    setIsSyncingCloud(true);
+    try {
+      await syncDataToFirestore(authUser.uid, {
+        spaces,
+        accounts,
+        categories,
+        transactions,
+        budgets,
+        counterparties,
+        debtLedger,
+        goals,
+        assets,
+        recurring,
+        userSettings,
+      });
+      setAuthUser((prev) => (prev ? { ...prev, lastSyncedAt: new Date().toISOString() } : null));
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const markAIOnboardingSeen = () => {
+    setUserSettings((prev) => ({ ...prev, aiOnboardingPromptSeen: true, onboardingCompleted: true }));
+    setIsAIOnboardingOpen(false);
+  };
+
+  const clearChatHistory = () => {
+    setChatHistory([
+      {
+        id: `welcome_${Date.now()}`,
+        role: 'assistant',
+        content: 'Conversation réinitialisée. Comment puis-je vous aider avec vos finances aujourd’hui ?',
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+  };
+
+  // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -314,10 +457,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Transactions
   const addTransaction = (txData: Omit<Transaction, 'id'>) => {
-    const id = `tx_${Date.now()}`;
+    const id = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
     const newTx: Transaction = { ...txData, id };
 
-    // Update account balance
     setAccounts((prev) =>
       prev.map((acc) => {
         if (acc.id === newTx.accountId) {
@@ -329,7 +471,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setTransactions((prev) => [newTx, ...prev]);
 
-    // If transaction is marked recurring, add or update recurring item if requested
     if (newTx.isRecurring && newTx.categoryId) {
       const existingRec = recurring.find((r) => r.categoryId === newTx.categoryId);
       if (!existingRec) {
@@ -352,7 +493,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Update streak
     setUserSettings((s) => ({
       ...s,
       streakDays: s.streakDays + 1,
@@ -364,7 +504,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = transactions.find((t) => t.id === id);
     if (!target) return;
 
-    // Reverse balance
     setAccounts((prev) =>
       prev.map((acc) => {
         if (acc.id === target.accountId) {
@@ -381,16 +520,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const oldTx = transactions.find((t) => t.id === updatedTx.id);
     if (!oldTx) return;
 
-    // Adjust balances
     setAccounts((prev) =>
       prev.map((acc) => {
         let bal = acc.balance;
-        if (acc.id === oldTx.accountId) {
-          bal -= oldTx.amount;
-        }
-        if (acc.id === updatedTx.accountId) {
-          bal += updatedTx.amount;
-        }
+        if (acc.id === oldTx.accountId) bal -= oldTx.amount;
+        if (acc.id === updatedTx.accountId) bal += updatedTx.amount;
         return { ...acc, balance: Math.round(bal * 100) / 100 };
       })
     );
@@ -398,11 +532,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions((prev) => prev.map((t) => (t.id === updatedTx.id ? updatedTx : t)));
   };
 
-  const addBudget = (categoryId: string, amount: number) => {
+  const addBudget = (categoryId: string, amount: number, monthOverride?: string) => {
+    const targetMonth = monthOverride || selectedMonth;
     setBudgets((prev) => {
-      const existing = prev.findIndex(
-        (b) => b.categoryId === categoryId && b.month === selectedMonth
-      );
+      const existing = prev.findIndex((b) => b.categoryId === categoryId && b.month === targetMonth);
       if (existing >= 0) {
         const copy = [...prev];
         copy[existing] = { ...copy[existing], amount };
@@ -411,9 +544,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [
         ...prev,
         {
-          id: `b_${Date.now()}`,
+          id: `b_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
           categoryId,
-          month: selectedMonth,
+          month: targetMonth,
           amount,
           currency: userSettings.primaryCurrency,
         },
@@ -421,7 +554,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Period Vision Methods
   const setPeriodVision = (vision: PeriodVision) => {
     setPeriodRange((prev) => getPeriodRange(vision, prev.referenceDate));
   };
@@ -447,15 +579,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return isDateInPeriod(dateStr, periodRange);
   };
 
-  // Budget Reset Functions (Fixed, Variable, Group, All)
   const resetGroupBudgets = (groupId: string, targetMonth?: string) => {
     const month = targetMonth || selectedMonth;
-    const childCatIds = new Set(
-      categories.filter((c) => c.parentId === groupId || c.id === groupId).map((c) => c.id)
-    );
-    setBudgets((prev) =>
-      prev.map((b) => (childCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b))
-    );
+    const childCatIds = new Set(categories.filter((c) => c.parentId === groupId || c.id === groupId).map((c) => c.id));
+    setBudgets((prev) => prev.map((b) => (childCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b)));
   };
 
   const resetFixedBudgets = (targetMonth?: string) => {
@@ -465,21 +592,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .filter((c) => c.kind === 'FIXED_EXPENSE' || c.parentId === 'group_fixed' || c.parentId === 'group_pro_fixed')
         .map((c) => c.id)
     );
-    setBudgets((prev) =>
-      prev.map((b) => (fixedCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b))
-    );
+    setBudgets((prev) => prev.map((b) => (fixedCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b)));
   };
 
   const resetVariableBudgets = (targetMonth?: string) => {
     const month = targetMonth || selectedMonth;
     const varCatIds = new Set(
-      categories
-        .filter((c) => c.kind === 'VARIABLE_EXPENSE' || c.parentId === 'group_variable')
-        .map((c) => c.id)
+      categories.filter((c) => c.kind === 'VARIABLE_EXPENSE' || c.parentId === 'group_variable').map((c) => c.id)
     );
-    setBudgets((prev) =>
-      prev.map((b) => (varCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b))
-    );
+    setBudgets((prev) => prev.map((b) => (varCatIds.has(b.categoryId) && b.month === month ? { ...b, amount: 0 } : b)));
   };
 
   const resetAllBudgets = (targetMonth?: string) => {
@@ -487,7 +608,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBudgets((prev) => prev.map((b) => (b.month === month ? { ...b, amount: 0 } : b)));
   };
 
-  // Confirm Staged Statement Import
   const confirmStagedImport = (txs: StagedTransaction[], targetAccountId?: string) => {
     if (txs.length === 0) return;
     const defaultAccId = targetAccountId || accounts[0]?.id || 'acc_checking';
@@ -507,7 +627,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    // Update account balances
     setAccounts((prevAccs) =>
       prevAccs.map((acc) => {
         const addedToThis = newTransactions.filter((t) => t.accountId === acc.id);
@@ -521,10 +640,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsStatementReviewOpen(false);
   };
 
-
-  // Goals
   const addGoal = (goalData: Omit<Goal, 'id' | 'allocated'> & { initialAllocation?: number }) => {
-    const id = `goal_${Date.now()}`;
+    const id = `goal_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
     const newGoal: Goal = {
       id,
       spaceId: goalData.spaceId,
@@ -558,15 +675,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Debts & Bank Loans
   const addDebt = (data: NewDebtData) => {
     const isBank = data.type === 'BANK_LOAN';
-    let cp = counterparties.find(
-      (c) => c.name.toLowerCase() === data.counterpartyName.toLowerCase()
-    );
+    let cp = counterparties.find((c) => c.name.toLowerCase() === data.counterpartyName.toLowerCase());
     let cpId = cp?.id;
     if (!cp) {
-      cpId = `cp_${Date.now()}`;
+      cpId = `cp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
       const newCp: Counterparty = {
         id: cpId,
         name: data.counterpartyName,
@@ -577,7 +691,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const newLedgerItem: DebtLedgerItem = {
-      id: `dl_${Date.now()}`,
+      id: `dl_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       counterpartyId: cpId!,
       spaceId: 'personal',
       date: new Date().toISOString().slice(0, 10),
@@ -590,6 +704,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       interestRate: data.interestRate,
       remainingCapital: data.remainingCapital ?? data.amount,
       endDate: data.endDate,
+      amortizationSchedule: data.amortizationSchedule,
+      scheduleFileName: data.scheduleFileName,
     };
 
     setDebtLedger((prev) => [newLedgerItem, ...prev]);
@@ -607,9 +723,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (counterpartyName && item.counterpartyId) {
             setCounterparties((cps) =>
               cps.map((c) =>
-                c.id === item.counterpartyId
-                  ? { ...c, name: counterpartyName, contact: contact ?? c.contact }
-                  : c
+                c.id === item.counterpartyId ? { ...c, name: counterpartyName, contact: contact ?? c.contact } : c
               )
             );
           }
@@ -624,12 +738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDebtLedger((prev) => prev.filter((d) => d.id !== id));
   };
 
-  const repayDebt = (
-    counterpartyId: string,
-    amount: number,
-    accountId: string,
-    description: string
-  ) => {
+  const repayDebt = (counterpartyId: string, amount: number, accountId: string, description: string) => {
     const cp = counterparties.find((c) => c.id === counterpartyId);
     const cpName = cp ? cp.name : 'Contact';
 
@@ -638,7 +747,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     for (const item of items) {
       if (item.type === 'CREDIT_GIVEN') netBalance += item.amount;
       if (item.type === 'CREDIT_REPAID') netBalance -= item.amount;
-      if (item.type === 'LOAN_RECEIVED' || item.type === 'BANK_LOAN') netBalance -= (item.remainingCapital ?? item.amount);
+      if (item.type === 'LOAN_RECEIVED' || item.type === 'BANK_LOAN') netBalance -= item.remainingCapital ?? item.amount;
       if (item.type === 'LOAN_REPAID') netBalance += item.amount;
     }
 
@@ -668,10 +777,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Accounts
-  const addAccount = (accData: Omit<Account, 'id'>) => {
-    const id = `acc_${Date.now()}`;
+  const addAccount = (accData: Omit<Account, 'id'>): string => {
+    const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
     setAccounts((prev) => [...prev, { ...accData, id }]);
+    return id;
   };
 
   const updateAccount = (updatedAcc: Account) => {
@@ -683,12 +792,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAccounts((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const transferBetweenAccounts = (
-    fromId: string,
-    toId: string,
-    amount: number,
-    note?: string
-  ) => {
+  const transferBetweenAccounts = (fromId: string, toId: string, amount: number, note?: string) => {
     const fromAcc = accounts.find((a) => a.id === fromId);
     const toAcc = accounts.find((a) => a.id === toId);
     if (!fromAcc || !toAcc || amount <= 0) return;
@@ -713,7 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       accountId: toId,
       spaceId: toAcc.spaceId,
       date,
-      amount,
+      amount: amount,
       currency: toAcc.currency,
       description: desc,
       transferId,
@@ -730,9 +834,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions((prev) => [txOut, txIn, ...prev]);
   };
 
-  // Assets
   const addAsset = (assetData: Omit<Asset, 'id'>) => {
-    const id = `ast_${Date.now()}`;
+    const id = `ast_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
     setAssets((prev) => [...prev, { ...assetData, id }]);
   };
 
@@ -744,9 +847,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAssets((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // Recurring Items
   const addRecurring = (recData: Omit<RecurringItem, 'id'>) => {
-    const id = `rec_${Date.now()}`;
+    const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
     setRecurring((prev) => [...prev, { ...recData, id }]);
   };
 
@@ -759,9 +861,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleRecurringActive = (id: string) => {
-    setRecurring((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r))
-    );
+    setRecurring((prev) => prev.map((r) => (r.id === id ? { ...r, isActive: !r.isActive } : r)));
   };
 
   const toggleHideAmounts = () => {
@@ -769,10 +869,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleTheme = () => {
-    setUserSettings((prev) => ({
-      ...prev,
-      theme: prev.theme === 'dark' ? 'light' : 'dark',
-    }));
+    setUserSettings((prev) => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }));
   };
 
   const setCurrency = (currency: string) => {
@@ -784,16 +881,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markNotificationRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const clearAllNotifications = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
-  // Total Financial Reset (blank slate for all financial records, envelopes, budgets, savings goals, debts, accounts, persons and sub-envelope categories)
   const resetToZero = () => {
     try {
       Object.keys(localStorage).forEach((key) => {
@@ -801,31 +895,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.removeItem(key);
         }
       });
-    } catch (e) {}
+    } catch {}
 
-    // Reset account balances to 0 DH
     setAccounts((prev) => prev.map((a) => ({ ...a, balance: 0, alertThreshold: 0 })));
-    // Erase all transaction history
     setTransactions([]);
-    // Erase all personal bank loans, credits and debts
     setDebtLedger([]);
-    // Erase all counterparties, names, and contact details
     setCounterparties([]);
-    // Erase all physical/financial assets
     setAssets([]);
-    // Erase all recurring items and subscriptions
     setRecurring([]);
-    // Erase all savings goals (both target amounts and allocated savings)
     setGoals([]);
-    // Erase all envelope budgets of all types of expenses
     setBudgets([]);
-    // Erase all sub-envelope expense categories (keeps parent groups and income categories for custom categories)
     setCategories((prev) => prev.filter((c) => c.direction === 'IN' || c.isGroup));
-    // Clear notifications
     setNotifications([]);
   };
 
-  // Full reset ensuring localStorage is completely wiped of previous state and reloaded to demo
   const resetToDemo = () => {
     try {
       Object.keys(localStorage).forEach((key) => {
@@ -833,8 +916,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.removeItem(key);
         }
       });
-    } catch (e) {}
+    } catch {}
 
+    setSpaces(INITIAL_SPACES);
     setAccounts(INITIAL_ACCOUNTS);
     setCategories(INITIAL_CATEGORIES);
     setTransactions(INITIAL_TRANSACTIONS);
@@ -845,14 +929,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAssets(INITIAL_ASSETS);
     setRecurring(INITIAL_RECURRING);
     setNotifications(INITIAL_NOTIFICATIONS);
-    setUserSettings(INITIAL_USER_SETTINGS);
+    setUserSettings({ ...INITIAL_USER_SETTINGS, aiOnboardingPromptSeen: true });
   };
 
   const exportDataJson = (): string => {
     return JSON.stringify(
       {
-        version: '2.4.0',
+        version: '3.5.0',
         exportedAt: new Date().toISOString(),
+        spaces,
         accounts,
         categories,
         transactions,
@@ -872,48 +957,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const importDataJson = (json: string): boolean => {
     try {
       const data = JSON.parse(json);
-      if (Array.isArray(data.accounts)) {
-        setAccounts(data.accounts);
-        saveStorage('accounts', data.accounts);
-      }
-      if (Array.isArray(data.categories)) {
-        setCategories(data.categories);
-        saveStorage('categories', data.categories);
-      }
-      if (Array.isArray(data.transactions)) {
-        setTransactions(data.transactions);
-        saveStorage('transactions', data.transactions);
-      }
-      if (Array.isArray(data.budgets)) {
-        setBudgets(data.budgets);
-        saveStorage('budgets', data.budgets);
-      }
-      if (Array.isArray(data.counterparties)) {
-        setCounterparties(data.counterparties);
-        saveStorage('counterparties', data.counterparties);
-      }
-      if (Array.isArray(data.debtLedger)) {
-        setDebtLedger(data.debtLedger);
-        saveStorage('debtLedger', data.debtLedger);
-      }
-      if (Array.isArray(data.goals)) {
-        setGoals(data.goals);
-        saveStorage('goals', data.goals);
-      }
-      if (Array.isArray(data.assets)) {
-        setAssets(data.assets);
-        saveStorage('assets', data.assets);
-      }
-      if (Array.isArray(data.recurring)) {
-        setRecurring(data.recurring);
-        saveStorage('recurring', data.recurring);
-      }
-      if (data.userSettings) {
-        setUserSettings(data.userSettings);
-        saveStorage('userSettings', data.userSettings);
-      }
+      if (Array.isArray(data.spaces)) setSpaces(data.spaces);
+      if (Array.isArray(data.accounts)) setAccounts(data.accounts);
+      if (Array.isArray(data.categories)) setCategories(data.categories);
+      if (Array.isArray(data.transactions)) setTransactions(data.transactions);
+      if (Array.isArray(data.budgets)) setBudgets(data.budgets);
+      if (Array.isArray(data.counterparties)) setCounterparties(data.counterparties);
+      if (Array.isArray(data.debtLedger)) setDebtLedger(data.debtLedger);
+      if (Array.isArray(data.goals)) setGoals(data.goals);
+      if (Array.isArray(data.assets)) setAssets(data.assets);
+      if (Array.isArray(data.recurring)) setRecurring(data.recurring);
+      if (data.userSettings) setUserSettings(data.userSettings);
       return true;
-    } catch (e) {
+    } catch {
       return false;
     }
   };
@@ -924,6 +980,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         spaces,
         activeSpaceId,
         setActiveSpaceId,
+        updateSpace,
+        addSpace,
         accounts,
         categories,
         transactions,
@@ -935,6 +993,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recurring,
         notifications,
         userSettings,
+        authUser,
+        isSyncingCloud,
+        loginWithGoogle,
+        logoutGoogle,
+        syncNowWithCloud,
+        isAIOnboardingOpen,
+        setIsAIOnboardingOpen,
+        isAndroidModalOpen,
+        setIsAndroidModalOpen,
+        chatHistory,
+        setChatHistory,
+        clearChatHistory,
         selectedMonth,
         setSelectedMonth,
         activeTab,
@@ -947,74 +1017,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsCommandPaletteOpen,
         isNotificationsOpen,
         setIsNotificationsOpen,
-
-        // Period Vision
         periodRange,
         setPeriodVision,
         setPeriodReferenceDate,
         setCustomPeriod,
         navigatePeriodRange,
         isDateInActivePeriod,
-
-        // Actions Transactions & Budgets
         addTransaction,
         deleteTransaction,
         updateTransaction,
         addBudget,
-
-        // Category Modal & Management
         isAddCategoryModalOpen,
         setIsAddCategoryModalOpen,
         addCategoryDefaultKind,
         openAddCategoryModal,
         addCategory,
         deleteCategory,
-
-        // Budget Resets
         resetFixedBudgets,
         resetVariableBudgets,
         resetGroupBudgets,
         resetAllBudgets,
-
-        // Staged Statement Import
         isStatementReviewOpen,
         setIsStatementReviewOpen,
         stagedTransactions,
         setStagedTransactions,
         confirmStagedImport,
-
-        // Export Modal
         isExportModalOpen,
         setIsExportModalOpen,
-
         addGoal,
         updateGoal,
         deleteGoal,
         updateGoalAllocation,
-
         addDebt,
         updateDebt,
         deleteDebt,
         repayDebt,
-
         addAccount,
         updateAccount,
         deleteAccount,
         transferBetweenAccounts,
-
         addAsset,
         updateAsset,
         deleteAsset,
-
         addRecurring,
         updateRecurring,
         deleteRecurring,
         toggleRecurringActive,
-
         toggleHideAmounts,
         toggleTheme,
         setCurrency,
         setAccentColor,
+        markAIOnboardingSeen,
         markNotificationRead,
         clearAllNotifications,
         resetToDemo,

@@ -30,6 +30,18 @@ export const GoalsView: React.FC = () => {
 
   const icons = ['🚨', '🏖️', '🐑', '🏡', '🚗', '💻', '💍', '🎓', '👶', '🕋', '🎯', '📱', '✈️'];
 
+  const calculateMonthlySavingsRequired = (target: number, current: number, deadlineStr?: string) => {
+    if (!deadlineStr) return null;
+    const remaining = Math.max(0, target - current);
+    if (remaining === 0) return { monthly: 0, months: 0 };
+    const now = new Date();
+    const d = new Date(deadlineStr);
+    const diffMonths = (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+    const months = Math.max(1, diffMonths);
+    const monthly = Math.ceil(remaining / months);
+    return { monthly, months };
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(targetAmountStr);
@@ -187,6 +199,20 @@ export const GoalsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Monthly Savings Required Calculator Display */}
+              {g.deadline && (() => {
+                const req = calculateMonthlySavingsRequired(g.targetAmount, g.allocated, g.deadline);
+                if (!req || req.monthly === 0) return null;
+                return (
+                  <div className="flex items-center gap-1.5 rounded-xl bg-[#c4f24e]/10 border border-[#c4f24e]/20 p-2 text-[11px] text-[#c4f24e] font-semibold">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Épargne requise : <strong>+{formatCurrency(req.monthly, userSettings.primaryCurrency)}/mois</strong> ({req.months} mois)
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between border-t border-neutral-100 dark:border-neutral-800/60 pt-3">
                 <span className="text-[11px] text-neutral-400">
                   {isComplete
@@ -299,6 +325,19 @@ export const GoalsView: React.FC = () => {
                   className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-3 py-2 text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-lime-500"
                 />
               </div>
+
+              {deadline && targetAmountStr && (() => {
+                const target = parseFloat(targetAmountStr) || 0;
+                const initial = parseFloat(initialAllocStr) || 0;
+                const req = calculateMonthlySavingsRequired(target, initial, deadline);
+                if (!req || req.monthly === 0) return null;
+                return (
+                  <div className="rounded-xl bg-[#c4f24e]/10 border border-[#c4f24e]/20 p-2.5 text-xs text-neutral-200">
+                    <span className="font-bold text-[#c4f24e] block">Calculateur automatique d’épargne :</span>
+                    Pour atteindre cet objectif d'ici {deadline} ({req.months} mois), vous devez épargner <strong className="text-white">+{formatCurrency(req.monthly, userSettings.primaryCurrency)} / mois</strong>.
+                  </div>
+                );
+              })()}
 
               <button
                 type="submit"

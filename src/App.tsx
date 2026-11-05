@@ -27,6 +27,10 @@ import { AccountsView } from './components/views/AccountsView';
 import { AssetsView } from './components/views/AssetsView';
 import { RecurringView } from './components/views/RecurringView';
 import { SettingsView } from './components/views/SettingsView';
+import { ForecastView } from './components/views/ForecastView';
+import { AssistantView } from './components/views/AssistantView';
+import { AIOnboardingModal } from './components/modals/AIOnboardingModal';
+import { AndroidAppModal } from './components/modals/AndroidAppModal';
 
 const MainLayout: React.FC = () => {
   const { activeTab, isAddCategoryModalOpen, setIsAddCategoryModalOpen, addCategoryDefaultKind } = useApp();
@@ -42,6 +46,10 @@ const MainLayout: React.FC = () => {
         return <TransactionsView />;
       case 'cashflow':
         return <CashflowView />;
+      case 'forecast':
+        return <ForecastView />;
+      case 'assistant':
+        return <AssistantView />;
       case 'goals':
         return <GoalsView />;
       case 'debts':
@@ -91,6 +99,8 @@ const MainLayout: React.FC = () => {
       <ExportModal />
       <CommandPalette />
       <NotificationsDrawer />
+      <AIOnboardingModal />
+      <AndroidAppModal />
       <MobileMoreModal
         isOpen={isMobileMoreOpen}
         onClose={() => setIsMobileMoreOpen(false)}
